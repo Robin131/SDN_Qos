@@ -1,15 +1,9 @@
+# -*- coding: utf-8 -*-
 import struct
 import six
-import networkx as nx
-import copy
 
-from ryu.base import app_manager
-from ryu.controller import ofp_event
-from ryu.controller.handler import set_ev_cls
-from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER, CONFIG_DISPATCHER
 from ryu.lib.packet import packet, ethernet
-from ryu.lib.packet import lldp, ether_types
-from ryu.ofproto import ofproto_v1_3
+from ryu.lib.packet import lldp
 from ryu.ofproto.ether import ETH_TYPE_LLDP
 from ryu.lib import hub
 

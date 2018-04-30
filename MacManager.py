@@ -1,23 +1,5 @@
-import struct
-import six
-import networkx as nx
-import copy
+# -*- coding: utf-8 -*-
 
-from ryu.base import app_manager
-from ryu.controller import ofp_event
-from ryu.controller.handler import set_ev_cls
-from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER, CONFIG_DISPATCHER
-from ryu.lib.packet import packet, ethernet
-from ryu.lib.packet import lldp, ether_types
-from ryu.lib.packet import ipv4, tcp, udp, icmp, arp
-from ryu.ofproto import ofproto_v1_3
-from ryu.ofproto import ether, inet
-from ryu.lib import hub
-from netaddr import IPAddress, IPNetwork
-from collections import namedtuple
-from ryu.app.wsgi import WSGIApplication
-
-from ryu.lib.dpid import dpid_to_str, str_to_dpid
 
 class MacManager(object):
     def __init__(self, pmac_to_vmac, vmac_to_pmac):

@@ -1,4 +1,4 @@
-import struct
+# -*- coding: utf-8 -*-
 import six
 import networkx as nx
 import copy
@@ -103,7 +103,7 @@ class Controller(app_manager.RyuApp):
             return
 
         elif ev.state == DEAD_DISPATCHER:
-            _unregister(dp)
+            self._unregister(dp)
             return
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -145,8 +145,9 @@ class Controller(app_manager.RyuApp):
             if dst in self.vmac_to_pmac.keys():
                 dst_vmac = self.vmac_to_pmac[dst]
                 dpid = self.mac_manager.get_dpid_with_vmac(dst_vmac)
-                datapath = datapathes[dpid]
+                datapath = self.datapathes[dpid]
 
+                ethertype = eth.ethertype
                 pkt.del_protocol(eth)
                 pkt.add_protocol_from_head(ethernet.ethernet(ethertype, dst=dst_vmac, src=src_vmac))
                 pkt.serialize()
