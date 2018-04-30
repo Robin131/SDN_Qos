@@ -191,6 +191,10 @@ class Controller(app_manager.RyuApp):
                                                  in_port=in_port, actions=actions, data=msg.data)
                 dp.send_msg(out_packet)
 
+            # TODO not simply drop the packet
+            else:
+                return
+
 
 
 
