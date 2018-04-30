@@ -37,6 +37,8 @@ class Controller(app_manager.RyuApp):
 
         # tables
         # self.arp_table = self.utils.initIP2MAC()            # {ip -> mac}
+        self.arp_table = {'192.168.1.3':'00:00:00:00:00:01',
+                          '192.168.2.3':'00:00:00:00:00:02'}
         self.vmac_to_pmac = {}                              # {vmac -> pmac}
         self.pmac_to_vmac = {}                              # {pmac -> vmac}
         self.dpid_to_vmac = {}                              # {dpid -> vmac}
@@ -124,11 +126,15 @@ class Controller(app_manager.RyuApp):
         eth_pkt = six.next(i)
         assert type(eth_pkt) == ethernet.ethernet
 
-        lldp_pkt = six.next(i)
+        special_pkt = six.next(i)
 
         # LLDP packet
-        if type(lldp_pkt) == lldp.lldp:
+        if type(special_pkt) == lldp.lldp:
             self.lldp_listener.lldp_packet_in(ev)
+            return
+
+        elif type(special_pkt) == arp.arp:
+            # TODO deal with arp packet
             return
 
         eth = pkt.get_protocols(ethernet.ethernet)[0]
