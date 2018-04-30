@@ -24,6 +24,7 @@ from LLDP import LLDPListener
 from FlowModifier import FlowModifier
 from MacManager import MacManager
 from TopoManager import TopoManager
+from ArpManager import ArpManager
 # import utils as U
 
 class Controller(app_manager.RyuApp):
@@ -37,8 +38,8 @@ class Controller(app_manager.RyuApp):
 
         # tables
         # self.arp_table = self.utils.initIP2MAC()            # {ip -> mac}
-        self.arp_table = {'192.168.1.3':'00:00:00:00:00:01',
-                          '192.168.2.3':'00:00:00:00:00:02'}
+        self.arp_table = {1:{'192.168.1.3':'00:00:00:00:00:01',                 # {tenant_id ->{ip -> mac}}
+                          '192.168.2.3':'00:00:00:00:00:02'}}
         self.vmac_to_pmac = {}                              # {vmac -> pmac}
         self.pmac_to_vmac = {}                              # {pmac -> vmac}
         self.dpid_to_vmac = {}                              # {dpid -> vmac}
@@ -59,6 +60,8 @@ class Controller(app_manager.RyuApp):
                                       vmac_to_pmac=self.vmac_to_pmac)
         self.topoManager = TopoManager(topo=self.switch_topo,
                                        dpid_to_dpid=self.dpid_to_dpid)
+        self.arp_manager = ArpManager(arp_table=self.arp_table,
+                                      pmac_to_vmac=self.pmac_to_vmac)
 
 
 
@@ -121,6 +124,11 @@ class Controller(app_manager.RyuApp):
         dpid = dp.id
         pkt = packet.Packet(msg.data)
 
+        eth = pkt.get_protocols(ethernet.ethernet)[0]
+        dst = eth.dst
+        src = eth.src
+        in_port = msg.match['in_port']
+
         # check the protocol
         i = iter(pkt)
         eth_pkt = six.next(i)
@@ -132,15 +140,12 @@ class Controller(app_manager.RyuApp):
         if type(special_pkt) == lldp.lldp:
             self.lldp_listener.lldp_packet_in(ev)
             return
-
+        # arp packet
         elif type(special_pkt) == arp.arp:
-            # TODO deal with arp packet
+            # TODO change tenant_id
+            self.arp_manager.handle_arp(datapath=dp, port=in_port, pkt_ethernet=pkt,
+                                        pkt_arp=special_pkt, tenant_id=1)
             return
-
-        eth = pkt.get_protocols(ethernet.ethernet)[0]
-        dst = eth.dst
-        src = eth.src
-        in_port = msg.match['in_port']
 
         # check if the source has a vmac
         if not src in self.pmac_to_vmac.keys():
