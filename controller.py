@@ -23,6 +23,7 @@ from ryu.lib.dpid import dpid_to_str, str_to_dpid
 from LLDP import LLDPListener
 from FlowModifier import FlowModifier
 from MacManager import MacManager
+from TopoManager import TopoManager
 # import utils as U
 
 class Controller(app_manager.RyuApp):
@@ -54,6 +55,8 @@ class Controller(app_manager.RyuApp):
         self.flow_manager = FlowModifier()
         self.mac_manager = MacManager(pmac_to_vmac=self.pmac_to_vmac,
                                       vmac_to_pmac=self.vmac_to_pmac)
+        self.topoManager = TopoManager(topo=self.switch_topo,
+                                       dpid_to_dpid=self.dpid_to_dpid)
 
 
 
@@ -111,6 +114,8 @@ class Controller(app_manager.RyuApp):
         print('receive a packet')
         msg = ev.msg
         dp = msg.datapath
+        ofproto = dp.ofproto
+        parser = dp.ofproto_parserf
         dpid = dp.id
         pkt = packet.Packet(msg.data)
 
@@ -139,24 +144,53 @@ class Controller(app_manager.RyuApp):
             # install flow table to (pmac -> vmac) when sending
             # install flow table to (vmac -> pmac) when receving
             self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac)
-            self.flow_manager.transfer_dst_vmac_to_pmac(ev, src, src_vmac)
+            self.flow_manager.transfer_dst_vmac_to_pmac(ev, src_vmac, src)
 
             # send the packet if know the dst_vmac
+            # if dst in self.vmac_to_pmac.keys():
+            #     dst_vmac = self.vmac_to_pmac[dst]
+            #     # TODO should I install a flow entry here to (dst_pmac -> dst_vmac)?
+            #     dpid = self.mac_manager.get_dpid_with_vmac(dst_vmac)
+            #     datapath = self.datapathes[dpid]
+            #
+            #     # TODO add a flow entry avoid packet in next time
+            #     actions = [parser.OFPMatch(in_port=in_port, eth_dst=dst)]
+            #
+            #     # send the packet
+            #     ethertype = eth.ethertype
+            #     pkt.del_protocol(eth)
+            #     pkt.add_protocol_from_head(ethernet.ethernet(ethertype, dst=dst_vmac, src=src_vmac))
+            #     pkt.serialize()
+            #
+            #     datapath.send_msg(pkt)
+            #
+            #
+            #
+            # else:
+            #     # TODO check the ports which connects to a host and send the packet
+            #     print('unknow dst_mac')
+            #     return
+        # if has this vmac
+        else:
+            # if also has dst_vmac
             if dst in self.vmac_to_pmac.keys():
-                dst_vmac = self.vmac_to_pmac[dst]
-                dpid = self.mac_manager.get_dpid_with_vmac(dst_vmac)
-                datapath = self.datapathes[dpid]
+                dst_dpid = self.mac_manager.get_dpid_with_vmac(dst)
+                path, last_switch = self.topoManager.get_path(dpid, dst_dpid)
+                # install flow entry for switches on path
+                for connect in path:
+                    datapath = self.datapathes[connect[0]]
+                    port = connect[1]
+                    self.flow_manager.install_sending_flow(datapath, port, src, dst)
+                # install flow entry for the last switch
+                last_datapath = self.datapathes[last_switch]
+                out_port = self.mac_manager.get_port_id_with_vmac(dst)
+                self.flow_manager.install_sending_flow(last_datapath, out_port, src, self.vmac_to_pmac[dst])
+                # finally send the packet
+                actions = [parser.OFPActionOutput(out_port)]
+                out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
+                                                 in_port=in_port, actions=actions, data=msg.data)
+                dp.send_msg(out_packet)
 
-                ethertype = eth.ethertype
-                pkt.del_protocol(eth)
-                pkt.add_protocol_from_head(ethernet.ethernet(ethertype, dst=dst_vmac, src=src_vmac))
-                pkt.serialize()
-
-                datapath.send_msg(pkt)
-            else:
-                # TODO check the ports which connects to a host and send the packet
-                print('unknow dst_mac')
-                return
 
 
 

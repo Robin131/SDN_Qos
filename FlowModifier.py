@@ -64,3 +64,15 @@ class FlowModifier(object):
                         parser.OFPInstructionGotoTable(table_id=1)]
         self.add_flow(datapath=datapath, priority=1, table_id=0, match=match,
                       instructions=instructions)
+
+    def install_sending_flow(self, datapath, out_port, src_vmac, dst_vmac):
+        # TODO buffer id?
+        parser = datapath.ofproto_parser
+        ofproto = datapath.ofproto
+        actions = [parser.OFPActionOutput(out_port)]
+        instruction = [parser.OFPInstructionActions(
+            ofproto.OFPIT_APPLY_ACTIONS, actions
+        )]
+        match = parser.OFPMatch(eth_src=src_vmac, eth_dst=dst_vmac)
+        self.add_flow(datapath=datapath, priority=1, instructions=instruction,
+                      table_id=1)
