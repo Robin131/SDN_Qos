@@ -69,7 +69,7 @@ class LLDPListener(object):
 
 
     def _send_lldp_packet(self, dp):
-        print("send llpd packet")
+        # print("send llpd packet")
         lldp_data = LLDPPacket.lldp_packet(dp.id, 0,
                                            '00:00:00:00:00:00', self.DEFAULT_TTL)
 
@@ -111,7 +111,7 @@ class LLDPListener(object):
         dp.send_msg(mod)
 
     def lldp_packet_in(self, ev):
-        print('receive a lldp packet')
+        # print('receive a lldp packet')
         msg = ev.msg
         dp = msg.datapath
         dpid = dp.id
@@ -124,14 +124,22 @@ class LLDPListener(object):
             src_dpid = LLDPPacket.lldp_parse(msg.data)
         except:
             return
-        print('receive a lldp packet, dpid, src_dpid:', dpid, src_dpid)
+        # print('receive a lldp packet, dpid, src_dpid:', dpid, src_dpid)
 
         for port in self.dpid_ports[src_dpid].values():
             if port.hw_addr == src_mac:
                 src_port_no = port.port_no
 
         # 添加端口连接情况
-        self.dpid_to_dpid[(src_dpid, src_port_no)] = dpid
+        flag = False
+        for key, value in self.dpid_to_dpid.items():
+            if key[0] == dpid and value == src_dpid:
+                flag = True
+                break
+            else:
+                continue
+        if not flag:
+            self.dpid_to_dpid[(src_dpid, src_port_no)] = dpid
 
         # 向topo图中添加边
         self.topo.add_edge(src_dpid, dpid)
@@ -139,14 +147,14 @@ class LLDPListener(object):
     def lldp_loop(self):
         while True:
             hub.sleep(2)
-            print("lldp detect")
+            # print("lldp detect")
             for dp in self.datapathes.values():
                 self._send_lldp_packet(dp)
 
             hub.sleep(5)
-            print("test:check dpid_to_dpid", self.dpid_to_dpid)
-            print("nodes:", self.topo.nodes())
-            print("edges:", self.topo.edges())
+            # print("test:check dpid_to_dpid", self.dpid_to_dpid)
+            # print("nodes:", self.topo.nodes())
+            # print("edges:", self.topo.edges())
 
 
 

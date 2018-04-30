@@ -111,11 +111,11 @@ class Controller(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
-        print('receive a packet')
+        # print('receive a packet')
         msg = ev.msg
         dp = msg.datapath
         ofproto = dp.ofproto
-        parser = dp.ofproto_parserf
+        parser = dp.ofproto_parser
         dpid = dp.id
         pkt = packet.Packet(msg.data)
 
@@ -138,13 +138,23 @@ class Controller(app_manager.RyuApp):
 
         # check if the source has a vmac
         if not src in self.pmac_to_vmac.keys():
-            src_vmac = self.mac_manager.get_vmac_new_host(dpid=dpid, port_id=in_port)
-            self.pmac_to_vmac[src] = src_vmac
-            self.vmac_to_pmac[src_vmac] = src
-            # install flow table to (pmac -> vmac) when sending
-            # install flow table to (vmac -> pmac) when receving
-            self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac)
-            self.flow_manager.transfer_dst_vmac_to_pmac(ev, src_vmac, src)
+            # first check whether this is pmac for host(not a vmac for host or switch, not a pmac for port that connect ovs)
+            all_ports_pmac = []
+            for id, ports in self.dpid_to_ports.items():
+                for p_id, p in ports.items():
+                    all_ports_pmac.append(p.hw_addr)
+            if not src in self.vmac_to_pmac.keys() and not src in self.dpid_to_vmac.values()\
+                    and not src in all_ports_pmac:
+                # test
+                print('new host coming!!==============' + src)
+                src_vmac = self.mac_manager.get_vmac_new_host(dpid=dpid, port_id=in_port)
+                self.pmac_to_vmac[src] = src_vmac
+                self.vmac_to_pmac[src_vmac] = src
+                print(self.pmac_to_vmac)
+                # install flow table to (pmac -> vmac) when sending
+                # install flow table to (vmac -> pmac) when receving
+                self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac)
+                self.flow_manager.transfer_dst_vmac_to_pmac(ev, src_vmac, src)
 
             # send the packet if know the dst_vmac
             # if dst in self.vmac_to_pmac.keys():
