@@ -32,9 +32,7 @@ class FlowModifier(object):
             ofproto.OFPIT_APPLY_ACTIONS, actions
         )]
 
-        # TODO table 0 中为什么要有miss处理
         self.add_flow(dp, 0, match, instruction)
-        # self.utils.add_flow(datapath, 0, match, instruction)
         self.add_flow(dp, 0, match, instruction, table_id=1)
 
     def transfer_src_pmac_to_vmac(self, ev, src, src_vmac):

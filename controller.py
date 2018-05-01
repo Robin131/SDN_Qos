@@ -142,8 +142,11 @@ class Controller(app_manager.RyuApp):
             return
         # arp packet
         elif type(special_pkt) == arp.arp:
-            # TODO change tenant_id
-            self.arp_manager.handle_arp(datapath=dp, port=in_port, pkt_ethernet=pkt,
+            # test
+            print('a arp packte is coming===============')
+            print(in_port)
+            tenant_id = self.mac_manager.get_tenant_id_with_vmac(src)
+            self.arp_manager.handle_arp(datapath=dp, in_port=in_port, pkt_ethernet=eth,
                                         pkt_arp=special_pkt, tenant_id=1)
             return
 
@@ -166,6 +169,8 @@ class Controller(app_manager.RyuApp):
                 # install flow table to (vmac -> pmac) when receving
                 self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac)
                 self.flow_manager.transfer_dst_vmac_to_pmac(ev, src_vmac, src)
+                # TODO install sending flow for this host
+
 
             # send the packet if know the dst_vmac
             # if dst in self.vmac_to_pmac.keys():
@@ -220,10 +225,45 @@ class Controller(app_manager.RyuApp):
 
 
 
-
+    # below is the test function
     def test(self):
-        hub.sleep(10)
-        print(self.dpid_to_dpid)
+        while True:
+            hub.sleep(7)
+            for key, value in self.datapathes.items():
+                print(str(key) + '=========================================')
+                self.send_flow_stats_request(value)
+
+    def send_flow_stats_request(self, datapath):
+        ofp = datapath.ofproto
+        ofp_parser = datapath.ofproto_parser
+
+        cookie = cookie_mask = 0
+        match = ofp_parser.OFPMatch(eth_src='00:00:00:00:00:01')
+        req = ofp_parser.OFPFlowStatsRequest(datapath, 0,
+                                         ofp.OFPTT_ALL,
+                                         ofp.OFPP_ANY, ofp.OFPG_ANY,
+                                         cookie, cookie_mask,
+                                         match)
+        datapath.send_msg(req)
+
+    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
+    def flow_stats_reply_handler(self, ev):
+        flows = []
+        for stat in ev.msg.body:
+            flows.append('table_id=%s '
+                         'duration_sec=%d duration_nsec=%d '
+                         'priority=%d '
+                         'idle_timeout=%d hard_timeout=%d flags=0x%04x '
+                         'cookie=%d packet_count=%d byte_count=%d '
+                         'match=%s instructions=%s' %
+                         (stat.table_id,
+                          stat.duration_sec, stat.duration_nsec,
+                          stat.priority,
+                          stat.idle_timeout, stat.hard_timeout, stat.flags,
+                          stat.cookie, stat.packet_count, stat.byte_count,
+                          stat.match, stat.instructions))
+        print('FlowStats: %s', flows)
+
 
 
 

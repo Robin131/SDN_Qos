@@ -29,6 +29,9 @@ class MacManager(object):
     def get_port_id_with_vmac(self, vmac):
         return self._get_port_id(vmac)
 
+    def get_tenant_id_with_vmac(self, vmac):
+        return self._get_tenant_id(vmac)
+
     def _get_tenant_id(self, vmac):
         split = vmac.split(':')
         return int(split[0], 16)

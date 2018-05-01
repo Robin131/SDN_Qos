@@ -8,32 +8,42 @@ class ArpManager(object):
         self.arp_table = arp_table
         self.pmac_to_vmac = pmac_to_vmac
 
-    def handle_arp(self, datapath, port, pkt_ethernet, pkt_arp, tenant_id):
+    def handle_arp(self, datapath, in_port, pkt_ethernet, pkt_arp, tenant_id):
         parser = datapath.ofproto_parser
-        if not pkt_arp.opcide == arp.ARP_REQUEST:
+        if not pkt_arp.opcode == arp.ARP_REQUEST:
             return
+        # test
+        elif pkt_arp.opcode == arp.ARP_REPLY:
+            print('test pass!!')
         dst_ip = pkt_arp.dst_ip
-        dst_mac = ''
+        dst_pmac = ''
         # get dst_pmac
-        if dst_ip in self.arp_table[tenent_id].keys():
-            dst_mac = self.arp_table[tenant_id][dst_ip]
+        if dst_ip in self.arp_table[tenant_id].keys():
+            dst_pmac = self.arp_table[tenant_id][dst_ip]
         else:
             return
 
+        if not dst_pmac in self.pmac_to_vmac.keys():
+            print('arp error:no such host recorded')
+            return
+        dst_vmac = self.pmac_to_vmac[dst_pmac]
+        # test
+        print('This packet is from ' + pkt_ethernet.src + ' and is to ' + dst_ip)
+
         # fake a arp pkt and answer
         pkt = packet.Packet()
-        pkt.add_protocol(ethernet.ethernet(ethertype=pkt_ethernet.ehtertype,
-                                           dst=pkt_ethernet.src, src=dst_mac))
+        pkt.add_protocol(ethernet.ethernet(ethertype=pkt_ethernet.ethertype,
+                                           dst=pkt_ethernet.src, src=dst_vmac))
         pkt.add_protocol(arp.arp(opcode=arp.ARP_REPLY,
-                                 src_mac=dst_mac,
+                                 src_mac=dst_vmac,
                                  src_ip=pkt_arp.dst_ip,
                                  dst_mac=pkt_arp.src_mac,
                                  dst_ip=pkt_arp.src_ip))
         pkt.serialize()
-        actions = [parser.OFPActionOutput(port=port)]
-        out = dp.ofproto_parser.OFPPacketOut(
-            datapath=datapath, in_port=port,
-            buffer_id=dp.ofproto.OFP_NO_BUFFER, actions=actions,
+        actions = [parser.OFPActionOutput(port=in_port)]
+        out = datapath.ofproto_parser.OFPPacketOut(
+            datapath=datapath, in_port=datapath.ofproto.OFPP_CONTROLLER,
+            buffer_id=datapath.ofproto.OFP_NO_BUFFER, actions=actions,
             data=pkt
         )
 
