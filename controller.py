@@ -68,7 +68,7 @@ class Controller(app_manager.RyuApp):
 
         # hub
         self.topo_detect_hub = hub.spawn(self.lldp_listener.lldp_loop)
-        self.test_hub = hub.spawn(self.test)
+        # self.test_hub = hub.spawn(self.test)
 
 
     def _register(self, datapath):
@@ -104,6 +104,7 @@ class Controller(app_manager.RyuApp):
             if dpid in self.datapathes.keys():
                 return
 
+            # install lldp packet flow entry, missing flow entry
             self._register(dp)
             self.lldp_listener.install_lldp_flow(ev)
             self.flow_manager.install_missing_flow(ev)
@@ -117,6 +118,8 @@ class Controller(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
         # print('receive a packet')
+        # test
+        print('a packet coming ==================')
         msg = ev.msg
         dp = msg.datapath
         ofproto = dp.ofproto
@@ -128,6 +131,8 @@ class Controller(app_manager.RyuApp):
         dst = eth.dst
         src = eth.src
         in_port = msg.match['in_port']
+        # test
+        print('This packet is form ' + src + ' to ' + dst)
 
         # check the protocol
         i = iter(pkt)
@@ -150,8 +155,8 @@ class Controller(app_manager.RyuApp):
                                         pkt_arp=special_pkt, tenant_id=1)
             return
 
-        # check if the source has a vmac
-        if not src in self.pmac_to_vmac.keys():
+        # check if the source has no record
+        if (not src in self.pmac_to_vmac.keys()) and (not src in self.vmac_to_pmac.keys()):
             # first check whether this is pmac for host(not a vmac for host or switch, not a pmac for port that connect ovs)
             all_ports_pmac = []
             for id, ports in self.dpid_to_ports.items():
@@ -167,10 +172,10 @@ class Controller(app_manager.RyuApp):
                 print(self.pmac_to_vmac)
                 # install flow table to (pmac -> vmac) when sending
                 # install flow table to (vmac -> pmac) when receving
+                # install receiving flow entry for this host
                 self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac)
                 self.flow_manager.transfer_dst_vmac_to_pmac(ev, src_vmac, src)
-                # TODO install sending flow for this host
-
+                self.flow_manager.install_receiving_flow_entry(dp, src, in_port)
 
             # send the packet if know the dst_vmac
             # if dst in self.vmac_to_pmac.keys():
@@ -196,22 +201,22 @@ class Controller(app_manager.RyuApp):
             #     # TODO check the ports which connects to a host and send the packet
             #     print('unknow dst_mac')
             #     return
-        # if has this vmac
-        else:
+        # if src is a vmac
+        elif src in self.vmac_to_pmac.keys():
             # if also has dst_vmac
             if dst in self.vmac_to_pmac.keys():
                 dst_dpid = self.mac_manager.get_dpid_with_vmac(dst)
-                path, last_switch = self.topoManager.get_path(dpid, dst_dpid)
+                path = self.topoManager.get_path(dpid, dst_dpid)
+                # test
+                print('should be a ping packet==========================')
+                print(path)
                 # install flow entry for switches on path
                 for connect in path:
                     datapath = self.datapathes[connect[0]]
                     port = connect[1]
                     self.flow_manager.install_sending_flow(datapath, port, src, dst)
-                # install flow entry for the last switch
-                last_datapath = self.datapathes[last_switch]
-                out_port = self.mac_manager.get_port_id_with_vmac(dst)
-                self.flow_manager.install_sending_flow(last_datapath, out_port, src, self.vmac_to_pmac[dst])
                 # finally send the packet
+                out_port = path[0][1]
                 actions = [parser.OFPActionOutput(out_port)]
                 out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
                                                  in_port=in_port, actions=actions, data=msg.data)
@@ -220,6 +225,9 @@ class Controller(app_manager.RyuApp):
             # TODO not simply drop the packet
             else:
                 return
+
+        else:
+            print('wrong logic for scr')
 
 
 

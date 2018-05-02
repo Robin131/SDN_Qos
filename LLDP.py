@@ -131,30 +131,22 @@ class LLDPListener(object):
                 src_port_no = port.port_no
 
         # 添加端口连接情况
-        flag = False
-        for key, value in self.dpid_to_dpid.items():
-            if key[0] == dpid and value == src_dpid:
-                flag = True
-                break
-            else:
-                continue
-        if not flag:
-            self.dpid_to_dpid[(src_dpid, src_port_no)] = dpid
+        self.dpid_to_dpid[(src_dpid, src_port_no)] = dpid
 
         # 向topo图中添加边
         self.topo.add_edge(src_dpid, dpid)
 
     def lldp_loop(self):
         while True:
-            hub.sleep(2)
+            hub.sleep(5)
             # print("lldp detect")
             for dp in self.datapathes.values():
                 self._send_lldp_packet(dp)
 
-            hub.sleep(5)
-            # print("test:check dpid_to_dpid", self.dpid_to_dpid)
-            # print("nodes:", self.topo.nodes())
-            # print("edges:", self.topo.edges())
+            print("test:check dpid_to_dpid", self.dpid_to_dpid)
+            print("nodes:", self.topo.nodes())
+            print("edges:", self.topo.edges())
+            hub.sleep(10000)
 
 
 

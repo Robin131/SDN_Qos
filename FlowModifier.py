@@ -63,7 +63,7 @@ class FlowModifier(object):
         self.add_flow(datapath=datapath, priority=1, table_id=0, match=match,
                       instructions=instructions)
 
-    def install_sending_flow(self, datapath, out_port, src_vmac, dst_vmac, last=False):
+    def install_sending_flow(self, datapath, out_port, src_vmac, dst_vmac):
         # TODO buffer id?
         parser = datapath.ofproto_parser
         ofproto = datapath.ofproto
@@ -71,9 +71,17 @@ class FlowModifier(object):
         instruction = [parser.OFPInstructionActions(
             ofproto.OFPIT_APPLY_ACTIONS, actions
         )]
-        if not last:
-            match = parser.OFPMatch(eth_src=src_vmac, eth_dst=dst_vmac)
-        else:
-            match = parser.OFPMatch(eth_dst=dst_vmac)
+        match = parser.OFPMatch(eth_src=src_vmac, eth_dst=dst_vmac)
         self.add_flow(datapath=datapath, priority=1, match=match, instructions=instruction,
                       table_id=1)
+
+    def install_receiving_flow_entry(self, dp, src_pmac ,in_port):
+        ofproto = dp.ofproto
+        parser = dp.ofproto_parser
+
+        actions = [parser.OFPActionOutput(in_port)]
+        instruction = [parser.OFPInstructionActions(
+            ofproto.OFPIT_APPLY_ACTIONS, actions
+        )]
+        match = parser.OFPMatch(eth_src=src_pmac)
+        self.add_flow(datapath=dp, priority=1, match=match, instructions=instruction, table_id=1)

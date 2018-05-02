@@ -38,8 +38,8 @@ class MacManager(object):
 
     def _get_dpid(self, vmac):
         split = vmac.split(':')
-        return int(split[1], 16)
+        return int(split[2], 16)
 
     def _get_port_id(self, vmac):
         split = vmac.split(':')
-        return int(split[2], 16)
+        return int(split[5], 16)
