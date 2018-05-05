@@ -41,6 +41,7 @@ class Controller(app_manager.RyuApp):
         self.arp_table = {1:{'192.168.1.3':'00:00:00:00:00:01',                 # {tenant_id ->{ip -> mac}}
                           '192.168.2.3':'00:00:00:00:00:02',
                              '192.168.3.3':'00:00:00:00:00:03'}}
+        self.host_pmac = ['00:00:00:00:00:01', '00:00:00:00:00:02', '00:00:00:00:00:03']
         self.vmac_to_pmac = {}                              # {vmac -> pmac}
         self.pmac_to_vmac = {}                              # {pmac -> vmac}
         self.dpid_to_vmac = {}                              # {dpid -> vmac}
@@ -88,7 +89,7 @@ class Controller(app_manager.RyuApp):
         return
 
     def _unregister(self, datapath):
-
+        # TODO
         return
 
 
@@ -157,14 +158,10 @@ class Controller(app_manager.RyuApp):
             return
 
         # check if the source has no record
-        if (not src in self.pmac_to_vmac.keys()) and (not src in self.vmac_to_pmac.keys()):
+        if not src in self.pmac_to_vmac.keys() and not src in self.vmac_to_pmac.keys():
             # first check whether this is pmac for host(not a vmac for host or switch, not a pmac for port that connect ovs)
-            all_ports_pmac = []
-            for id, ports in self.dpid_to_ports.items():
-                for p_id, p in ports.items():
-                    all_ports_pmac.append(p.hw_addr)
-            if not src in self.vmac_to_pmac.keys() and not src in self.dpid_to_vmac.values()\
-                    and not src in all_ports_pmac:
+
+            if src in self.host_pmac:
                 # test
                 print('new host coming!!==============' + src)
                 src_vmac = self.mac_manager.get_vmac_new_host(dpid=dpid, port_id=in_port)
