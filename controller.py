@@ -39,7 +39,8 @@ class Controller(app_manager.RyuApp):
         # tables
         # self.arp_table = self.utils.initIP2MAC()            # {ip -> mac}
         self.arp_table = {1:{'192.168.1.3':'00:00:00:00:00:01',                 # {tenant_id ->{ip -> mac}}
-                          '192.168.2.3':'00:00:00:00:00:02'}}
+                          '192.168.2.3':'00:00:00:00:00:02',
+                             '192.168.3.3':'00:00:00:00:00:03'}}
         self.vmac_to_pmac = {}                              # {vmac -> pmac}
         self.pmac_to_vmac = {}                              # {pmac -> vmac}
         self.dpid_to_vmac = {}                              # {dpid -> vmac}
@@ -132,7 +133,7 @@ class Controller(app_manager.RyuApp):
         src = eth.src
         in_port = msg.match['in_port']
         # test
-        print('This packet is form ' + src + ' to ' + dst)
+        print('This packet is from ' + src + ' to ' + dst + ', the ovs is ' + dpid_to_str(dpid))
 
         # check the protocol
         i = iter(pkt)
@@ -212,14 +213,21 @@ class Controller(app_manager.RyuApp):
                 print(path)
                 # install flow entry for switches on path
                 for connect in path:
-                    datapath = self.datapathes[connect[0]]
-                    port = connect[1]
-                    self.flow_manager.install_sending_flow(datapath, port, src, dst)
+                        datapath = self.datapathes[connect[0]]
+                        port = connect[1]
+                        self.flow_manager.install_sending_flow(datapath=datapath,
+                                                               out_port=port,
+                                                               src_vmac=src,
+                                                               dst_vmac=dst,
+                                                               buffer_id=msg.buffer_id)
                 # finally send the packet
                 out_port = path[0][1]
                 actions = [parser.OFPActionOutput(out_port)]
+                data = None
+                if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+                    data = msg.data
                 out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
-                                                 in_port=in_port, actions=actions, data=msg.data)
+                                                 in_port=in_port, actions=actions, data=data)
                 dp.send_msg(out_packet)
 
             # TODO not simply drop the packet
