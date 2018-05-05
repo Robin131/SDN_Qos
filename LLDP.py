@@ -111,12 +111,13 @@ class LLDPListener(object):
         dp.send_msg(mod)
 
     def lldp_packet_in(self, ev):
-        # print('receive a lldp packet')
+        print('receive a lldp packet========================')
         msg = ev.msg
         dp = msg.datapath
         dpid = dp.id
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
+        in_port = msg.match['in_port']
 
         # 只接受lldp包
         try:
@@ -132,25 +133,37 @@ class LLDPListener(object):
 
         # 添加端口连接情况
         self.dpid_to_dpid[(src_dpid, src_port_no)] = dpid
+        self.dpid_to_dpid[(dpid, in_port)] = src_dpid
+
+        # check whether the other dpid and port have been added
+        # flag = False
+        # for key, value in self.dpid_to_dpid.items():
+        #     if key[0] == dpid and value == src_dpid:
+        #         flag = True
+        #         break
+        #     else:
+        #         continue
+        # if flag == False:
+        #     print('No ' + str(dpid) + ' ' + str(src_dpid))
+        #     self._send_lldp_packet(self.datapathes[dpid])
 
         # 向topo图中添加边
         self.topo.add_edge(src_dpid, dpid)
 
-    def lldp_loop(self):
-        while True:
-            hub.sleep(5)
-            # print("lldp detect")
-            for dp in self.datapathes.values():
-                self._send_lldp_packet(dp)
-
-            print("test:check dpid_to_dpid", self.dpid_to_dpid)
-            print("nodes:", self.topo.nodes())
-            print("edges:", self.topo.edges())
-            hub.sleep(10000)
+        print("test:check dpid_to_dpid", self.dpid_to_dpid)
+        print("nodes:", self.topo.nodes())
+        print("edges:", self.topo.edges())
 
 
 
+    def lldp_detect(self, dp):
+        print("lldp detect")
+        self._send_lldp_packet(dp)
 
+    def lldp_loop(self, dp):
+        print("lldp loop")
+        for dp in self.datapathes:
+            self._send_lldp_packet(dp)
 
 
 

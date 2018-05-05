@@ -68,7 +68,7 @@ class Controller(app_manager.RyuApp):
 
 
         # hub
-        self.topo_detect_hub = hub.spawn(self.lldp_listener.lldp_loop)
+        # self.topo_detect_hub = hub.spawn(self.lldp_listener.lldp_loop)
         # self.test_hub = hub.spawn(self.test)
 
 
@@ -84,11 +84,11 @@ class Controller(app_manager.RyuApp):
 
         #self.pmac_to_vmac[]
         self.dpid_to_vmac[dpid] = vmac
-
+        self.lldp_listener.lldp_detect(datapath)
         return
 
     def _unregister(self, datapath):
-        # TODO
+
         return
 
 
@@ -120,7 +120,7 @@ class Controller(app_manager.RyuApp):
     def packet_in_handler(self, ev):
         # print('receive a packet')
         # test
-        print('a packet coming ==================')
+        # print('a packet coming ==================')
         msg = ev.msg
         dp = msg.datapath
         ofproto = dp.ofproto
@@ -133,7 +133,7 @@ class Controller(app_manager.RyuApp):
         src = eth.src
         in_port = msg.match['in_port']
         # test
-        print('This packet is from ' + src + ' to ' + dst + ', the ovs is ' + dpid_to_str(dpid))
+        # print('This packet is from ' + src + ' to ' + dst + ', the ovs is ' + dpid_to_str(dpid))
 
         # check the protocol
         i = iter(pkt)
