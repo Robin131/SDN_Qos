@@ -111,7 +111,7 @@ class LLDPListener(object):
         dp.send_msg(mod)
 
     def lldp_packet_in(self, ev):
-        print('receive a lldp packet========================')
+        # print('receive a lldp packet========================')
         msg = ev.msg
         dp = msg.datapath
         dpid = dp.id
@@ -135,24 +135,12 @@ class LLDPListener(object):
         self.dpid_to_dpid[(src_dpid, src_port_no)] = dpid
         self.dpid_to_dpid[(dpid, in_port)] = src_dpid
 
-        # check whether the other dpid and port have been added
-        # flag = False
-        # for key, value in self.dpid_to_dpid.items():
-        #     if key[0] == dpid and value == src_dpid:
-        #         flag = True
-        #         break
-        #     else:
-        #         continue
-        # if flag == False:
-        #     print('No ' + str(dpid) + ' ' + str(src_dpid))
-        #     self._send_lldp_packet(self.datapathes[dpid])
-
         # 向topo图中添加边
         self.topo.add_edge(src_dpid, dpid)
 
-        print("test:check dpid_to_dpid", self.dpid_to_dpid)
-        print("nodes:", self.topo.nodes())
-        print("edges:", self.topo.edges())
+        # print("test:check dpid_to_dpid", self.dpid_to_dpid)
+        # print("nodes:", self.topo.nodes())
+        # print("edges:", self.topo.edges())
 
 
 
