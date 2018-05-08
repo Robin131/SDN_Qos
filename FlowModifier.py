@@ -32,12 +32,17 @@ class FlowModifier(object):
             parser.OFPInstructionGotoTable(table_id=1)
         ]
 
-        instruction1 = [parser.OFPInstructionActions(
+        instruction1 = [
+            parser.OFPInstructionGotoTable(table_id=2)
+        ]
+
+        instruction2 = [parser.OFPInstructionActions(
             ofproto.OFPIT_APPLY_ACTIONS, actions
         )]
 
         self.add_flow(dp, 0, match, instruction0)
         self.add_flow(dp, 0, match, instruction1, table_id=1)
+        self.add_flow(dp, 0, match, instruction2, table_id=2)
 
     def transfer_src_pmac_to_vmac(self, ev, src, src_vmac):
         msg = ev.msg
@@ -63,12 +68,11 @@ class FlowModifier(object):
         match = parser.OFPMatch(eth_dst=dst_vmac)
         actions = [parser.OFPActionSetField(eth_dst=dst_pmac)]
         instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
-                        parser.OFPInstructionGotoTable(table_id=1)]
-        self.add_flow(datapath=datapath, priority=1, table_id=0, match=match,
+                        parser.OFPInstructionGotoTable(table_id=2)]
+        self.add_flow(datapath=datapath, priority=1, table_id=1, match=match,
                       instructions=instructions)
 
-    def install_sending_flow(self, datapath, out_port, src_vmac, dst_vmac, buffer_id=None, table_id=1):
-        # TODO buffer id?
+    def install_sending_flow(self, datapath, out_port, src_vmac, dst_vmac, buffer_id=None, table_id=2):
         parser = datapath.ofproto_parser
         ofproto = datapath.ofproto
         actions = [parser.OFPActionOutput(out_port)]
@@ -88,4 +92,4 @@ class FlowModifier(object):
             ofproto.OFPIT_APPLY_ACTIONS, actions
         )]
         match = parser.OFPMatch(eth_dst=src_pmac)
-        self.add_flow(datapath=dp, priority=2, match=match, instructions=instruction, table_id=1)
+        self.add_flow(datapath=dp, priority=2, match=match, instructions=instruction, table_id=2)
