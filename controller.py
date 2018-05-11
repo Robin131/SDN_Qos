@@ -25,13 +25,14 @@ from FlowModifier import FlowModifier
 from MacManager import MacManager
 from TopoManager import TopoManager
 from ArpManager import ArpManager
+from PortListener import PortListener
 # import utils as U
 
 class Controller(app_manager.RyuApp):
 
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    DEFAULT_TTL = 120  # default ttl for LLDP packet
-    IDLE_TIME = 10
+    DEFAULT_TTL = 120           # default ttl for LLDP packet
+    PORT_INQUIRY_TIME = 10      # default time interval for port inquiry
 
     def __init__(self, *args, **kwargs):
         super(Controller, self).__init__(*args, **kwargs)
@@ -66,11 +67,14 @@ class Controller(app_manager.RyuApp):
                                        dpid_to_dpid=self.dpid_to_dpid)
         self.arp_manager = ArpManager(arp_table=self.arp_table,
                                       pmac_to_vmac=self.pmac_to_vmac)
-
+        self.port_listener = PortListener(datapathes=self.datapathes,
+                                          sleep_time=self.PORT_INQUIRY_TIME)
 
 
 
         # hub
+        self.port_statistics_info_hub = hub.spawn(self.port_listener.inquiry_all_port_statistics_stats)
+
         # self.topo_detect_hub = hub.spawn(self.lldp_listener.lldp_loop)
         # self.test_hub = hub.spawn(self.test)
 
@@ -240,48 +244,13 @@ class Controller(app_manager.RyuApp):
         else:
             print('wrong logic for scr. ' + 'This packet is from ' + src + ' to ' + dst + ', the ovs is ' + dpid_to_str(dpid))
 
+    @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
+    def port_statistics_stats_reply_handler(self, ev):
+        self.port_listener.port_statistics_stats_handler(ev)
 
-
-
-
-    # below is the test function
-    def test(self):
-        while True:
-            hub.sleep(7)
-            for key, value in self.datapathes.items():
-                print(str(key) + '=========================================')
-                self.send_flow_stats_request(value)
-
-    def send_flow_stats_request(self, datapath):
-        ofp = datapath.ofproto
-        ofp_parser = datapath.ofproto_parser
-
-        cookie = cookie_mask = 0
-        match = ofp_parser.OFPMatch(eth_src='00:00:00:00:00:01')
-        req = ofp_parser.OFPFlowStatsRequest(datapath, 0,
-                                         ofp.OFPTT_ALL,
-                                         ofp.OFPP_ANY, ofp.OFPG_ANY,
-                                         cookie, cookie_mask,
-                                         match)
-        datapath.send_msg(req)
-
-    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
-    def flow_stats_reply_handler(self, ev):
-        flows = []
-        for stat in ev.msg.body:
-            flows.append('table_id=%s '
-                         'duration_sec=%d duration_nsec=%d '
-                         'priority=%d '
-                         'idle_timeout=%d hard_timeout=%d flags=0x%04x '
-                         'cookie=%d packet_count=%d byte_count=%d '
-                         'match=%s instructions=%s' %
-                         (stat.table_id,
-                          stat.duration_sec, stat.duration_nsec,
-                          stat.priority,
-                          stat.idle_timeout, stat.hard_timeout, stat.flags,
-                          stat.cookie, stat.packet_count, stat.byte_count,
-                          stat.match, stat.instructions))
-        print('FlowStats: %s', flows)
+    @set_ev_cls(ofp_event.EventOFPPortDescStatsReply, MAIN_DISPATCHER)
+    def port_desc_stats_reply_handler(self, ev):
+        self.port_listener.port_desc_stats_handler(ev)
 
 
 

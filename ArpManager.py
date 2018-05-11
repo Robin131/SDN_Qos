@@ -26,7 +26,7 @@ class ArpManager(object):
         if not dst_pmac in self.pmac_to_vmac.keys():
             print('arp error:no such host recorded for ip:', dst_ip)
             return
-        dst_vmac = self.pmac_to_vmac[dst_pmac]
+        dst_vmac = self.pmac_to_mac[dst_pmac]
         # test
         print('This packet is from ' + pkt_ethernet.src + ' and is to ' + dst_ip)
 
