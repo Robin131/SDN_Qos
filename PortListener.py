@@ -9,25 +9,31 @@ class PortListener(object):
 
     def _send_port_desc_status_request(self, datapath):
         ofp_parser = datapath.ofproto_parser
-        req = ofp_parser.OFPPortDescStatsRequest(datapath, OFPMPF_REQ_MORE)
+        req = ofp_parser.OFPPortDescStatsRequest(datapath, 0)
         datapath.send_msg(req)
 
     def _send_port_statistics_stats_request(self, datapath):
         ofp = datapath.ofproto
         ofp_parser = datapath.ofproto_parser
 
-        req = ofp_parser.OFPPortStatsRequest(datapath, OFPMPF_REQ_MORE, ofp.OFPP_ANY)
+        req = ofp_parser.OFPPortStatsRequest(datapath, 0, ofp.OFPP_ANY)
         datapath.send_msg(req)
 
     def inquiry_all_port_desc_stats(self):
-        hub.sleep(self.sleep_time)
-        for dp in self.datapathes:
-            self._send_port_desc_status_request(dp)
+        while(True):
+            # test
+            print('ask all ports for desc info===============')
+            hub.sleep(self.sleep_time)
+            for dp in self.datapathes.values():
+                self._send_port_desc_status_request(dp)
 
     def inquiry_all_port_statistics_stats(self):
-        hub.sleep(self.sleep_time)
-        for dp in self.datapathes:
-            self._send_port_desc_status_request(dp)
+        while(True):
+            # test
+            print('ask all ports for statis info===============')
+            hub.sleep(self.sleep_time)
+            for dp in self.datapathes.values():
+                self._send_port_statistics_stats_request(dp)
 
     def port_statistics_stats_handler(self, ev):
         print(ev.msg.body)
