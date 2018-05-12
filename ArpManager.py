@@ -11,6 +11,7 @@ class ArpManager(object):
     def handle_arp(self, datapath, in_port, pkt_ethernet, pkt_arp, tenant_id):
         parser = datapath.ofproto_parser
         if not pkt_arp.opcode == arp.ARP_REQUEST:
+            # TODO deal with arp reply becuase there is something wired in Ping process
             return
         # test
         elif pkt_arp.opcode == arp.ARP_REPLY:

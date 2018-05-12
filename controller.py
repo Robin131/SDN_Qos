@@ -33,13 +33,11 @@ class Controller(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     DEFAULT_TTL = 120           # default ttl for LLDP packet
     PORT_INQUIRY_TIME = 10      # default time interval for port inquiry
-    PORT_SPEED_CAL_INTERVAL = 3     # default time interval to calculate port speed
+    PORT_SPEED_CAL_INTERVAL = 5     # default time interval to calculate port speed
 
     def __init__(self, *args, **kwargs):
         super(Controller, self).__init__(*args, **kwargs)
 
-        # tables
-        # self.arp_table = self.utils.initIP2MAC()            # {ip -> mac}
         self.arp_table = {1:{'192.168.1.3':'00:00:00:00:00:01',                 # {tenant_id ->{ip -> mac}}
                           '192.168.2.3':'00:00:00:00:00:02',
                              '192.168.3.3':'00:00:00:00:00:03',
@@ -79,8 +77,8 @@ class Controller(app_manager.RyuApp):
 
 
         # hub
-        self.port_desc_info_hub = hub.spawn(self.port_listener.inquiry_all_port_desc_stats)
-        # self.port_statistics_info_hub = hub.spawn(self.port_listener.inquiry_all_port_statistics_stats)
+        # self.port_desc_info_hub = hub.spawn(self.port_listener.inquiry_all_port_desc_stats)
+        self.port_statistics_info_hub = hub.spawn(self.port_listener.inquiry_all_port_statistics_stats)
         # self.topo_detect_hub = hub.spawn(self.lldp_listener.lldp_loop)
         # self.test_hub = hub.spawn(self.test)
 

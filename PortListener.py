@@ -1,5 +1,7 @@
 from ryu.ofproto.ofproto_v1_3 import OFPMPF_REQ_MORE
 from ryu.lib import hub
+from Util import Util as U
+import time
 
 class PortListener(object):
     def __init__(self, datapathes, sleep_time, dpid_to_dpid, port_speed, calculate_interval):
@@ -15,9 +17,9 @@ class PortListener(object):
 
     def _init_port_speed(self):
         for (dpid, port_id) in self.dpid_to_dpid.keys():
-            self.port_speed[dpid][port_id]['cur_speed'] = 0
+            U.add3DimDict(self.port_speed, dpid, port_id, 'cur_speed', 0)
             # TODO initiate max speed
-            self.port_speed[dpid][port_id]['max_speed'] = -1
+            U.add3DimDict(self.port_speed, dpid, port_id, 'max_speed', -1)
         self.port_speed_init = True
 
     def _send_port_desc_status_request(self, datapath):
@@ -43,19 +45,23 @@ class PortListener(object):
     def inquiry_all_port_statistics_stats(self):
         # wait to iniate
         # TODO change to another appropriate way
-        hub.sleep(100)
+        hub.sleep(10)
         if not self.port_speed_init:
             self._init_port_speed()
+
         while(True):
             # test
+            print(self.port_speed)
             print('ask all ports for statis info===============')
-            hub.sleep(self.sleep_time)
             self.temp_port_speed.clear()
             for dp in self.datapathes.values():
                 self._send_port_statistics_stats_request(dp)
+            print('first packet sending finish')
             hub.sleep(self.calculate_interval)
             for dp in self.datapathes.values():
                 self._send_port_statistics_stats_request(dp)
+            print('second packet sending finish')
+            hub.sleep(self.sleep_time)
 
 
     def port_statistics_stats_handler(self, ev):
@@ -67,20 +73,28 @@ class PortListener(object):
             port_id = stat.port_no
             # only calculate speed fpr ports that connect ovs
             if (dpid, port_id) in self.dpid_to_dpid.keys():
+                # test
+                print(str(dpid) + ' ' + str(port_id) )
                 duration = stat.duration_sec
                 rx_bytes = stat.rx_bytes
                 tx_bytes = stat.tx_bytes
+                print('duration : ' + str(duration))
+                print('rx_bytes : ' + str(rx_bytes))
+                print('tx_bytes : ' + str(tx_bytes))
+
 
                 # if there is no record for this port
                 if not dpid in self.temp_port_speed.keys():
-                    self.temp_port_speed[dpid][port_id]['duration'] = duration
-                    self.temp_port_speed[dpid][port_id]['rx_bytes'] = rx_bytes
-                    self.temp_port_speed[dpid][port_id]['tx_bytes'] = tx_bytes
+                    U.add3DimDict(self.temp_port_speed, dpid, port_id, 'duration', duration)
+                    U.add3DimDict(self.temp_port_speed, dpid, port_id, 'rx_bytes', rx_bytes)
+                    U.add3DimDict(self.temp_port_speed, dpid, port_id, 'tx_bytes', tx_bytes)
                 else:
                     interval = abs(self.temp_port_speed[dpid][port_id]['duration'] - duration)
-                    bytes = abs(self.temp_port_speed[dpid][port_id]['rx_bytes'] - rx_bytes +
-                                abs(self.temp_port_speed[dpid][port_id]['tx_bytes'] - tx_bytes))
+                    bytes = abs(self.temp_port_speed[dpid][port_id]['rx_bytes'] - rx_bytes) + \
+                            abs(self.temp_port_speed[dpid][port_id]['tx_bytes'] - tx_bytes)
                     speed = bytes / interval
+                    # test
+                    print('speed : ' + str(speed))
                     self.port_speed[dpid][port_id]['cur_speed'] = speed
 
 
