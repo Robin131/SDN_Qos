@@ -33,6 +33,7 @@ class Controller(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     DEFAULT_TTL = 120           # default ttl for LLDP packet
     PORT_INQUIRY_TIME = 10      # default time interval for port inquiry
+    PORT_SPEED_CAL_INTERVAL = 3     # default time interval to calculate port speed
 
     def __init__(self, *args, **kwargs):
         super(Controller, self).__init__(*args, **kwargs)
@@ -52,6 +53,7 @@ class Controller(app_manager.RyuApp):
         self.dpid_to_ports = {}                             # {dpid -> ports}
         self.dpid_to_dpid = {}                              # {(dpid, port_id) -> dpid}
         self.switch_topo = nx.Graph()                       # switch topo
+        self.port_speed = {}                                # {dpid -> {port_id -> 'cur_speed', 'max_speed'}}
 
         # components
         # self.utils = U.Utils()
@@ -59,7 +61,8 @@ class Controller(app_manager.RyuApp):
                                           dpid_potrs=self.dpid_to_ports,
                                           dpid_to_dpid=self.dpid_to_dpid,
                                           topo=self.switch_topo,
-                                          DEFAULT_TTL=self.DEFAULT_TTL)
+                                          DEFAULT_TTL=self.DEFAULT_TTL,
+                                          port_speed=self.port_speed)
         self.flow_manager = FlowModifier()
         self.mac_manager = MacManager(pmac_to_vmac=self.pmac_to_vmac,
                                       vmac_to_pmac=self.vmac_to_pmac)
@@ -68,7 +71,10 @@ class Controller(app_manager.RyuApp):
         self.arp_manager = ArpManager(arp_table=self.arp_table,
                                       pmac_to_vmac=self.pmac_to_vmac)
         self.port_listener = PortListener(datapathes=self.datapathes,
-                                          sleep_time=self.PORT_INQUIRY_TIME)
+                                          sleep_time=self.PORT_INQUIRY_TIME,
+                                          dpid_to_dpid=self.dpid_to_dpid,
+                                          port_speed=self.port_speed,
+                                          calculate_interval=self.PORT_SPEED_CAL_INTERVAL)
 
 
 

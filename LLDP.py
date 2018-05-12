@@ -58,7 +58,7 @@ class LLDPPacket(object):
 
 
 class LLDPListener(object):
-    def __init__(self, datapathes, dpid_potrs, dpid_to_dpid, topo, DEFAULT_TTL):
+    def __init__(self, datapathes, dpid_potrs, dpid_to_dpid, topo, DEFAULT_TTL, port_speed):
         super(LLDPListener, self).__init__()
 
         self.DEFAULT_TTL = DEFAULT_TTL
@@ -66,6 +66,7 @@ class LLDPListener(object):
         self.dpid_ports = dpid_potrs
         self.dpid_to_dpid = dpid_to_dpid
         self.topo = topo
+        self.port_speed = port_speed
 
 
     def _send_lldp_packet(self, dp):
