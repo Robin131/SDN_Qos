@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from ryu.ofproto import ofproto_v1_3 as ofp_13
 import six
-import math.floor as floor
+import math
 
 class FlowModifier(object):
     def __init__(self):
@@ -99,13 +99,13 @@ class FlowModifier(object):
 
     def install_wildcard_sending_flow(self, dp, out_port, dst_dpid, buffer_id=None, table_id=2):
         dpid = dp.id
-        parser = dp.ofproto_parse
+        parser = dp.ofproto_parser
         ofproto = dp.ofproto
         match = parser.OFPMatch()
 
         match.append_field(header=ofp_13.OXM_OF_ETH_DST_W,
                            mask=self._get_switch_id_mask(),
-                           value=self._get_switch_id_value(dpid)
+                           value=self._get_switch_id_value(dst_dpid)
                            )
         actions = [parser.OFPActionOutput(out_port)]
         instruction = [parser.OFPInstructionActions(
@@ -116,9 +116,9 @@ class FlowModifier(object):
 
 
     def _get_switch_id_mask(self):
-        return six.int2byte(0) * 3 + six.int2byte(256) * 2
+        return six.int2byte(0) * 3 + six.int2byte(255) * 2
 
     def _get_switch_id_value(self, dpid):
-        return six.int2byte(0) * 3 + six.int2byte(int(floor(dpid / 256)))\
-               + six.int2byte(int(floor(dpid % 256)))
+        return six.int2byte(0) * 3 + six.int2byte(int(math.floor(dpid / 256)))\
+               + six.int2byte(int(math.floor(dpid % 256)))
 

@@ -84,7 +84,8 @@ class PortListener(object):
 
 
                 # if there is no record for this port
-                if not dpid in self.temp_port_speed.keys():
+                if not dpid in self.temp_port_speed.keys() or \
+                    (dpid in self.temp_port_speed.keys() and not port_id in self.temp_port_speed[dpid].keys()):
                     U.add3DimDict(self.temp_port_speed, dpid, port_id, 'duration', duration)
                     U.add3DimDict(self.temp_port_speed, dpid, port_id, 'rx_bytes', rx_bytes)
                     U.add3DimDict(self.temp_port_speed, dpid, port_id, 'tx_bytes', tx_bytes)
