@@ -47,7 +47,7 @@ class FlowModifier(object):
         self.add_flow(dp, 0, match, instruction1, table_id=1)
         self.add_flow(dp, 0, match, instruction2, table_id=2)
 
-    def transfer_src_pmac_to_vmac(self, ev, src, src_vmac):
+    def transfer_src_pmac_to_vmac(self, ev, src, src_vmac, meter_id=None):
         msg = ev.msg
         datapath = msg.datapath
         ofproto = datapath.ofproto
@@ -56,8 +56,14 @@ class FlowModifier(object):
 
         match = parser.OFPMatch(eth_src=src_pmac)
         actions = [parser.OFPActionSetField(eth_src=src_vmac)]
-        instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
-                        parser.OFPInstructionGotoTable(table_id=1)]
+        if not meter_id:
+            instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
+                            parser.OFPInstructionGotoTable(table_id=1)]
+        else:
+            instructions = [parser.OFPInstructionMeter(meter_id,ofproto.OFPIT_METER),
+                            parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
+                            parser.OFPInstructionGotoTable(table_id=1)]
+
         self.add_flow(datapath=datapath, priority=1, table_id=0, match=match,
                       instructions=instructions)
 

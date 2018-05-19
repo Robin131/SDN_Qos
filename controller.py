@@ -27,6 +27,7 @@ from TopoManager import TopoManager
 from ArpManager import ArpManager
 from PortListener import PortListener
 from HostManager import HostManager
+from MeterModifier import MeterModifier
 # import utils as U
 
 class Controller(app_manager.RyuApp):
@@ -45,12 +46,13 @@ class Controller(app_manager.RyuApp):
                              '192.168.3.3':'00:00:00:00:00:03',
                              '192.168.4.3':'00:00:00:00:00:04',
                             '192.168.111.1':'10:00:00:00:00:00'}}
-        self.host_pmac = {'00:00:00:00:00:01' : 1,
+        self.host_pmac = {'00:00:00:00:00:01' : 1,                              # pmac -> tenant_id
                           '00:00:00:00:00:02' : 1,
                           '00:00:00:00:00:03' : 1,
                           '00:00:00:00:00:04' : 1,
                           '10:00:00:00:00:00' : 1}
         self.tenant_level = {1 : 1}
+        self.tenant_speed = {1 : 1024 * 8}
         self.datacenter_id = 1
 
         # data in controller
@@ -62,6 +64,7 @@ class Controller(app_manager.RyuApp):
         self.dpid_to_dpid = {}                              # {(dpid, port_id) -> dpid}
         self.switch_topo = nx.Graph()                       # switch topo
         self.port_speed = {}                                # {dpid -> {port_id -> 'cur_speed', 'max_speed'}}
+        self.meters = {}                                    # {dpid -> {meter_id -> band_id}}
 
         # components
         # self.utils = U.Utils()
@@ -86,6 +89,8 @@ class Controller(app_manager.RyuApp):
                                           calculate_interval=self.PORT_SPEED_CAL_INTERVAL)
         self.host_manager = HostManager(arp_table=self.arp_table,
                                         host_pmac=self.host_pmac)
+        self.meter_manager = MeterModifier(meters=self.meters)
+
 
 
 
@@ -110,6 +115,8 @@ class Controller(app_manager.RyuApp):
         #self.pmac_to_vmac[]
         self.dpid_to_vmac[dpid] = vmac
         self.lldp_listener.lldp_detect(datapath)
+
+        self.meters[dpid] = {}
         return
 
     def _unregister(self, datapath):
@@ -188,16 +195,21 @@ class Controller(app_manager.RyuApp):
             if src in self.host_pmac.keys():
                 # test
                 print('new host coming!!==============' + src)
+                tenant_id = self.host_manager.get_tenant_id(src)
                 src_vmac = self.mac_manager.get_vmac_new_host(dpid=dpid, port_id=in_port,
                                                               datacenter_id=self.datacenter_id,
-                                                              tenant_id=self.host_manager.get_tenant_id(src))
+                                                              tenant_id=tenant_id)
                 self.pmac_to_vmac[src] = src_vmac
                 self.vmac_to_pmac[src_vmac] = src
                 print(self.vmac_to_pmac)
-                # install flow table to (pmac -> vmac) when sending
+                # install flow table to (pmac -> vmac) when sending (there may be a speed limit)
                 # install flow table to (vmac -> pmac) when receving
                 # install receiving flow entry for this host
-                self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac)
+                if tenant_id in self.tenant_speed.keys():
+                    meter_id = self.meter_manager.add_meter(datapath=dp, speed=self.tenant_speed[tenant_id])
+                    self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac, meter_id=meter_id)
+                else:
+                    self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac)
                 self.flow_manager.transfer_dst_vmac_to_pmac(ev, src_vmac, src)
                 self.flow_manager.install_receiving_flow_entry(dp, src, in_port)
 
