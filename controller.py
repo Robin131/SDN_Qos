@@ -238,11 +238,10 @@ class Controller(app_manager.RyuApp):
                 for connect in path:
                         datapath = self.datapathes[connect[0]]
                         port = connect[1]
-                        self.flow_manager.install_sending_flow(datapath=datapath,
-                                                               out_port=port,
-                                                               src_vmac=src,
-                                                               dst_vmac=dst,
-                                                               buffer_id=msg.buffer_id)
+                        self.flow_manager.install_wildcard_sending_flow(dp=datapath,
+                                                                        out_port=port,
+                                                                        dst_dpid=dst_dpid,
+                                                                        buffer_id=msg.buffer_id)
 
                 # finally send the packet
                 if len(path) > 0:
