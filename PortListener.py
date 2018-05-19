@@ -37,7 +37,7 @@ class PortListener(object):
     def inquiry_all_port_desc_stats(self):
         while(True):
             # test
-            print('ask all ports for desc info===============')
+            # print('ask all ports for desc info===============')
             hub.sleep(self.sleep_time)
             for dp in self.datapathes.values():
                 self._send_port_desc_status_request(dp)
@@ -51,16 +51,16 @@ class PortListener(object):
 
         while(True):
             # test
-            print(self.port_speed)
-            print('ask all ports for statis info===============')
+            # print(self.port_speed)
+            # print('ask all ports for statis info===============')
             self.temp_port_speed.clear()
             for dp in self.datapathes.values():
                 self._send_port_statistics_stats_request(dp)
-            print('first packet sending finish')
+            # print('first packet sending finish')
             hub.sleep(self.calculate_interval)
             for dp in self.datapathes.values():
                 self._send_port_statistics_stats_request(dp)
-            print('second packet sending finish')
+            # print('second packet sending finish')
             hub.sleep(self.sleep_time)
 
 
@@ -74,13 +74,13 @@ class PortListener(object):
             # only calculate speed fpr ports that connect ovs
             if (dpid, port_id) in self.dpid_to_dpid.keys():
                 # test
-                print(str(dpid) + ' ' + str(port_id) )
+                # print(str(dpid) + ' ' + str(port_id) )
                 duration = stat.duration_sec
                 rx_bytes = stat.rx_bytes
                 tx_bytes = stat.tx_bytes
-                print('duration : ' + str(duration))
-                print('rx_bytes : ' + str(rx_bytes))
-                print('tx_bytes : ' + str(tx_bytes))
+                # print('duration : ' + str(duration))
+                # print('rx_bytes : ' + str(rx_bytes))
+                # print('tx_bytes : ' + str(tx_bytes))
 
 
                 # if there is no record for this port
@@ -94,7 +94,7 @@ class PortListener(object):
                             abs(self.temp_port_speed[dpid][port_id]['tx_bytes'] - tx_bytes)
                     speed = bytes / interval
                     # test
-                    print('speed : ' + str(speed))
+                    # print('speed : ' + str(speed))
                     self.port_speed[dpid][port_id]['cur_speed'] = speed
 
 

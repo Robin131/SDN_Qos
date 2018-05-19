@@ -26,6 +26,7 @@ from MacManager import MacManager
 from TopoManager import TopoManager
 from ArpManager import ArpManager
 from PortListener import PortListener
+from HostManager import HostManager
 # import utils as U
 
 class Controller(app_manager.RyuApp):
@@ -38,12 +39,21 @@ class Controller(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(Controller, self).__init__(*args, **kwargs)
 
+        # record for network configuration
         self.arp_table = {1:{'192.168.1.3':'00:00:00:00:00:01',                 # {tenant_id ->{ip -> mac}}
                           '192.168.2.3':'00:00:00:00:00:02',
                              '192.168.3.3':'00:00:00:00:00:03',
                              '192.168.4.3':'00:00:00:00:00:04',
                             '192.168.111.1':'10:00:00:00:00:00'}}
-        self.host_pmac = ['00:00:00:00:00:01', '00:00:00:00:00:02', '00:00:00:00:00:03','00:00:00:00:00:04','10:00:00:00:00:00']
+        self.host_pmac = {'00:00:00:00:00:01' : 1,
+                          '00:00:00:00:00:02' : 1,
+                          '00:00:00:00:00:03' : 1,
+                          '00:00:00:00:00:04' : 1,
+                          '10:00:00:00:00:00' : 1}
+        self.tenant_level = {1 : 1}
+        self.datacenter_id = 1
+
+        # data in controller
         self.vmac_to_pmac = {}                              # {vmac -> pmac}
         self.pmac_to_vmac = {}                              # {pmac -> vmac}
         self.dpid_to_vmac = {}                              # {dpid -> vmac}
@@ -63,7 +73,8 @@ class Controller(app_manager.RyuApp):
                                           port_speed=self.port_speed)
         self.flow_manager = FlowModifier()
         self.mac_manager = MacManager(pmac_to_vmac=self.pmac_to_vmac,
-                                      vmac_to_pmac=self.vmac_to_pmac)
+                                      vmac_to_pmac=self.vmac_to_pmac,
+                                      tenant_level=self.tenant_level)
         self.topoManager = TopoManager(topo=self.switch_topo,
                                        dpid_to_dpid=self.dpid_to_dpid)
         self.arp_manager = ArpManager(arp_table=self.arp_table,
@@ -73,6 +84,8 @@ class Controller(app_manager.RyuApp):
                                           dpid_to_dpid=self.dpid_to_dpid,
                                           port_speed=self.port_speed,
                                           calculate_interval=self.PORT_SPEED_CAL_INTERVAL)
+        self.host_manager = HostManager(arp_table=self.arp_table,
+                                        host_pmac=self.host_pmac)
 
 
 
@@ -91,7 +104,8 @@ class Controller(app_manager.RyuApp):
         self.dpid_to_ports[dpid] = ports
 
         # create vmac for this datapath
-        vmac = self.mac_manager.get_vmac_new_switch(dpid)
+        vmac = self.mac_manager.get_vmac_new_switch(datapath=dpid,
+                                                    datacenter_id=self.datacenter_id)
 
         #self.pmac_to_vmac[]
         self.dpid_to_vmac[dpid] = vmac
@@ -171,10 +185,12 @@ class Controller(app_manager.RyuApp):
         if not src in self.pmac_to_vmac.keys() and not src in self.vmac_to_pmac.keys():
             # first check whether this is pmac for host(not a vmac for host or switch, not a pmac for port that connect ovs)
 
-            if src in self.host_pmac:
+            if src in self.host_pmac.keys():
                 # test
                 print('new host coming!!==============' + src)
-                src_vmac = self.mac_manager.get_vmac_new_host(dpid=dpid, port_id=in_port)
+                src_vmac = self.mac_manager.get_vmac_new_host(dpid=dpid, port_id=in_port,
+                                                              datacenter_id=self.datacenter_id,
+                                                              tenant_id=self.host_manager.get_tenant_id(src))
                 self.pmac_to_vmac[src] = src_vmac
                 self.vmac_to_pmac[src_vmac] = src
                 print(self.vmac_to_pmac)
@@ -251,13 +267,18 @@ class Controller(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def port_statistics_stats_reply_handler(self, ev):
         # test
-        print('ports statis info reply==========================')
+        # print('ports statis info reply==========================')
         self.port_listener.port_statistics_stats_handler(ev)
 
     @set_ev_cls(ofp_event.EventOFPPortDescStatsReply, MAIN_DISPATCHER)
     def port_desc_stats_reply_handler(self, ev):
         print('ports desc info reply==========================')
         self.port_listener.port_desc_stats_handler(ev)
+
+
+
+
+
 
 
 
