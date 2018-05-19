@@ -96,7 +96,7 @@ class Controller(app_manager.RyuApp):
 
         # hub
         # self.port_desc_info_hub = hub.spawn(self.port_listener.inquiry_all_port_desc_stats)
-        self.port_statistics_info_hub = hub.spawn(self.port_listener.inquiry_all_port_statistics_stats)
+        # self.port_statistics_info_hub = hub.spawn(self.port_listener.inquiry_all_port_statistics_stats)
         # self.topo_detect_hub = hub.spawn(self.lldp_listener.lldp_loop)
         # self.test_hub = hub.spawn(self.test)
 
@@ -285,40 +285,6 @@ class Controller(app_manager.RyuApp):
     def port_desc_stats_reply_handler(self, ev):
         print('ports desc info reply==========================')
         self.port_listener.port_desc_stats_handler(ev)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

@@ -9,14 +9,14 @@ class MeterModifier(object):
 
     def _get_new_meter_id(self, datapath):
         dpid = datapath.id
-        all_id = self.meters[dpid].keys()
+        all_id = list(self.meters[dpid].keys())
         if len(all_id) == 0:
             return 0
         list.sort(all_id)
         return all_id[-1] + 1
 
     def _get_new_band_id(self):
-        all_id = self.bands.keys()
+        all_id = list(self.bands.keys())
         if len(all_id) == 0:
             return 0
         list.sort(all_id)
@@ -56,7 +56,7 @@ class MeterModifier(object):
         new_band_id = self._get_new_band_id()
 
         band = parser.OFPMeterBandDrop(speed, burst_size)
-        band[new_band_id] = band
+        self.bands[new_band_id] = band
         return new_band_id
 
 
