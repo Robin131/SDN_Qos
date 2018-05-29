@@ -100,6 +100,7 @@ class Controller(app_manager.RyuApp):
         self.host_manager = HostManager(arp_table=self.arp_table,
                                         host_pmac=self.host_pmac)
         self.meter_manager = MeterModifier(meters=self.meters)
+        
         # self.gateways_manager = GatewayManager(possibie_gatewats=self.possible_gateways,
         #                                        gateways=self.gateways)
 
