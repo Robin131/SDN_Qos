@@ -1,4 +1,5 @@
 from ryu.ofproto import ofproto_v1_3 as ofp13
+from Util import Util as U
 
 class MeterModifier(object):
     def __init__(self, meters):
@@ -11,14 +12,14 @@ class MeterModifier(object):
         dpid = datapath.id
         all_id = list(self.meters[dpid].keys())
         if len(all_id) == 0:
-            return 0
+            return 1
         list.sort(all_id)
         return all_id[-1] + 1
 
     def _get_new_band_id(self):
         all_id = list(self.bands.keys())
         if len(all_id) == 0:
-            return 0
+            return 1
         list.sort(all_id)
         return all_id[-1] + 1
 
@@ -43,12 +44,14 @@ class MeterModifier(object):
             final_meter_id = self._get_new_meter_id(datapath)
             final_band_id = self._create_new_band(datapath, speed)
 
-        meter_mod = parser.OFPMeterMod(datapath=datapath,
+            meter_mod = parser.OFPMeterMod(datapath=datapath,
                                        command=ofp13.OFPMC_ADD,
                                        flags=flags,
                                        meter_id=final_meter_id,
                                        bands=[self.bands[final_band_id]])
-        datapath.send_msg(meter_mod)
+            datapath.send_msg(meter_mod)
+
+        U.add2DimDict(self.meters, dpid, final_meter_id, final_band_id)
         return final_meter_id
 
     def _create_new_band(self, datapath, speed, burst_size=10):

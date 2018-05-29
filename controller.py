@@ -28,6 +28,7 @@ from ArpManager import ArpManager
 from PortListener import PortListener
 from HostManager import HostManager
 from MeterModifier import MeterModifier
+# from GatewayManager import GatewayManager
 # import utils as U
 
 class Controller(app_manager.RyuApp):
@@ -41,19 +42,26 @@ class Controller(app_manager.RyuApp):
         super(Controller, self).__init__(*args, **kwargs)
 
         # record for network configuration
-        self.arp_table = {1:{'192.168.1.3':'00:00:00:00:00:01',                 # {tenant_id ->{ip -> mac}}
-                          '192.168.2.3':'00:00:00:00:00:02',
-                             '192.168.3.3':'00:00:00:00:00:03',
-                             '192.168.4.3':'00:00:00:00:00:04',
+        self.arp_table = {1:{'192.168.1.1':'00:00:00:00:00:01',                 # {tenant_id ->{ip -> mac}}
+                          '192.168.1.2':'00:00:00:00:00:02',
+                             '192.168.1.3':'00:00:00:00:00:03',
+                             '192.168.1.4':'00:00:00:00:00:04',
+                             '192.168.2.1':'00:00:00:00:00:05',
                             '192.168.111.1':'10:00:00:00:00:00'}}
         self.host_pmac = {'00:00:00:00:00:01' : 1,                              # pmac -> tenant_id
                           '00:00:00:00:00:02' : 1,
                           '00:00:00:00:00:03' : 1,
                           '00:00:00:00:00:04' : 1,
+                          '00:00:00:00:00:05' : 1,
                           '10:00:00:00:00:00' : 1}
         self.tenant_level = {1 : 1}
         self.tenant_speed = {1 : 1024 * 8}
         self.datacenter_id = 1
+
+        # record possible gateways for this controller {gateway_id -> {port_no -> datacenter_id}}
+        # if datacenter_id  == 0, then the port is for Internet
+        self.possible_gateways = {10 : {2 : 2},
+                                  11 : {2 : 2}}
 
         # data in controller
         self.vmac_to_pmac = {}                              # {vmac -> pmac}
@@ -65,6 +73,8 @@ class Controller(app_manager.RyuApp):
         self.switch_topo = nx.Graph()                       # switch topo
         self.port_speed = {}                                # {dpid -> {port_id -> 'cur_speed', 'max_speed'}}
         self.meters = {}                                    # {dpid -> {meter_id -> band_id}}
+        self.gateways = {}                                  # {dpid -> {port_no -> datacenter_id}}
+        self.gateway_mac = {}                               # {dpid -> pmac}
 
         # components
         # self.utils = U.Utils()
@@ -90,6 +100,9 @@ class Controller(app_manager.RyuApp):
         self.host_manager = HostManager(arp_table=self.arp_table,
                                         host_pmac=self.host_pmac)
         self.meter_manager = MeterModifier(meters=self.meters)
+        # self.gateways_manager = GatewayManager(possibie_gatewats=self.possible_gateways,
+        #                                        gateways=self.gateways)
+
 
 
 
@@ -117,7 +130,6 @@ class Controller(app_manager.RyuApp):
         self.lldp_listener.lldp_detect(datapath)
 
         self.meters[dpid] = {}
-        return
 
     def _unregister(self, datapath):
         # TODO
@@ -130,6 +142,7 @@ class Controller(app_manager.RyuApp):
         ofproto = dp.ofproto
         ofproto_parser = dp.ofproto_parser
         dpid = dp.id
+
 
         # when a switch connect
         if ev.state == MAIN_DISPATCHER:
@@ -206,7 +219,10 @@ class Controller(app_manager.RyuApp):
                 # install flow table to (vmac -> pmac) when receving
                 # install receiving flow entry for this host
                 if tenant_id in self.tenant_speed.keys():
+                    # test
+                    print('add meter')
                     meter_id = self.meter_manager.add_meter(datapath=dp, speed=self.tenant_speed[tenant_id])
+                    print('meter id is ' + str(meter_id))
                     self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac, meter_id=meter_id)
                 else:
                     self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac)

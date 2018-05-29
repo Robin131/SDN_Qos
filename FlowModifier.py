@@ -60,8 +60,8 @@ class FlowModifier(object):
             instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
                             parser.OFPInstructionGotoTable(table_id=1)]
         else:
-            instructions = [parser.OFPInstructionMeter(meter_id,ofproto.OFPIT_METER),
-                            parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
+            instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
+                            parser.OFPInstructionMeter(meter_id, ofproto.OFPIT_METER),
                             parser.OFPInstructionGotoTable(table_id=1)]
 
         self.add_flow(datapath=datapath, priority=1, table_id=0, match=match,

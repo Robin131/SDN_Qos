@@ -78,7 +78,6 @@ class MacManager(object):
 
     def _generate_tenant_id_vmac(self, tenant_id):
         return self._generate_switch_id_vmac(tenant_id)
-
     def _generate_vm_id_vmac(self, port_id):
         assert(port_id < 256)
         hex_str = str(hex(port_id))

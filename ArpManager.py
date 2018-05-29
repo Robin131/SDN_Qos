@@ -10,13 +10,12 @@ class ArpManager(object):
 
     def handle_arp(self, datapath, in_port, pkt_ethernet, pkt_arp, tenant_id):
         parser = datapath.ofproto_parser
+        dst_ip = pkt_arp.dst_ip
         if not pkt_arp.opcode == arp.ARP_REQUEST:
             # TODO deal with arp reply becuase there is something wired in Ping process
+            print('Its a reply from ' + pkt_ethernet.src + ' and is to ' + dst_ip)
             return
-        # test
-        elif pkt_arp.opcode == arp.ARP_REPLY:
-            print('test pass!!')
-        dst_ip = pkt_arp.dst_ip
+
         dst_pmac = ''
         # get dst_pmac
         if dst_ip in self.arp_table[tenant_id].keys():
@@ -26,6 +25,7 @@ class ArpManager(object):
 
         if not dst_pmac in self.pmac_to_vmac.keys():
             print('arp error:no such host recorded for ip:', dst_ip)
+            print(dst_pmac)
             return
         dst_vmac = self.pmac_to_vmac[dst_pmac]
         # test
