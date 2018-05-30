@@ -4,8 +4,9 @@ import six
 import math
 
 class FlowModifier(object):
-    def __init__(self):
+    def __init__(self, datapathes):
         super(FlowModifier, self).__init__()
+        self.daatapathes = datapathes
 
     def add_flow(self, datapath, priority,
                  match, instructions, table_id=0, buffer_id=None):
@@ -81,6 +82,7 @@ class FlowModifier(object):
         self.add_flow(datapath=datapath, priority=1, table_id=1, match=match,
                       instructions=instructions)
 
+    # install sending flow ((src, dst) to out_port on datapath)
     def install_sending_flow(self, datapath, out_port, src_vmac, dst_vmac, buffer_id=None, table_id=2):
         parser = datapath.ofproto_parser
         ofproto = datapath.ofproto
@@ -103,6 +105,7 @@ class FlowModifier(object):
         match = parser.OFPMatch(eth_dst=src_pmac)
         self.add_flow(datapath=dp, priority=2, match=match, instructions=instruction, table_id=2)
 
+    # wildcard for sending flow (form dp to datapath with id dst_dpid through out_port)
     def install_wildcard_sending_flow(self, dp, out_port, dst_dpid, buffer_id=None, table_id=2):
         dpid = dp.id
         parser = dp.ofproto_parser
@@ -120,11 +123,49 @@ class FlowModifier(object):
         self.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
                       table_id=table_id, buffer_id=buffer_id)
 
+    # install sending flow for datacenter on gateway
+    def install_datacenter_flow(self, datacenter_id, port_no, gateway_id):
+        gateway = self.daatapathes[gateway_id]
+        parser = gateway.ofproto_parser
+        ofproto = gateway.ofproto
+        match = parser.OFPMatch()
+
+        match.append_field(header=ofp_13.OXM_OF_ETH_DST_W,
+                           mask=self._get_datacenter_id_mask(),
+                           value=self._get_datacenter_id_value(datacenter_id)
+                           )
+        actions = [parser.OFPActionOutput(port_no)]
+        instructions = [parser.OFPInstructionActions(
+            ofproto.OFPIT_APPLY_ACTIONS, actions
+        )]
+        self.add_flow(datapath=gateway, priority=2, match=match, instructions=instructions,
+                      table_id=0, buffer_id=None)
+
+    # install sending flow for internet (NAT) pkt
+    def install_internet_flow(self, gateway_vmac, out_port, gateway_id):
+        gateway = self.daatapathes[gateway_id]
+        parser = gateway.ofproto_parser
+        ofproto = gateway.ofproto
+        match = parser.OFPMatch(eth_dst=gateway_vmac)
+        actions = [parser.OFPActionOutput(out_port)]
+        instructions = [parser.OFPInstructionActions(
+            ofproto.OFPIT_APPLY_ACTIONS, actions
+        )]
+        self.add_flow(datapath=gateway, priority=1, match=match, instructions=instructions,
+                      table_id=0, buffer_id=None)
+
 
     def _get_switch_id_mask(self):
         return six.int2byte(0) * 3 + six.int2byte(255) * 2
 
+    def _get_datacenter_id_mask(self):
+        return six.int2byte(15 * 16)
+
     def _get_switch_id_value(self, dpid):
         return six.int2byte(0) * 3 + six.int2byte(int(math.floor(dpid / 256)))\
                + six.int2byte(int(math.floor(dpid % 256)))
+
+    def _get_datacenter_id_value(self, datacenter_id):
+        assert datacenter_id < 16
+        return six.int2byte(datacenter_id * 16)
 

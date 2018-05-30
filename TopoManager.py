@@ -2,10 +2,11 @@
 import networkx as nx
 
 class TopoManager(object):
-    def __init__(self, topo, dpid_to_dpid):
+    def __init__(self, topo, dpid_to_dpid, gateways):
         super(TopoManager, self).__init__()
         self.topo = topo
         self.dpid_to_dpid = dpid_to_dpid
+        self.gateways = gateways
 
     # return ((ovs, port), (ovs, port), ...)
     def get_path(self, dpid1, dpid2):
@@ -27,3 +28,15 @@ class TopoManager(object):
                 return key[1]
 
         return -1
+
+    def get_nearest_gateway(self, src_dpid):
+        distance = {}
+        distance = nx.shortest_path_length(self.topo, source=src_dpid)
+        d_gateway = {}
+        for gateway_id in self.gateways.keys():
+            d_gateway[gateway_id] = distance[gateway_id]
+        return sorted(d_gateway.items(), key=lambda x: x[1])[0][0]
+
+
+
+

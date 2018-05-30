@@ -28,8 +28,8 @@ from ArpManager import ArpManager
 from PortListener import PortListener
 from HostManager import HostManager
 from MeterModifier import MeterModifier
-# from GatewayManager import GatewayManager
-# import utils as U
+from GatewayManager import GatewayManager
+
 
 class Controller(app_manager.RyuApp):
 
@@ -47,7 +47,12 @@ class Controller(app_manager.RyuApp):
                              '192.168.1.3':'00:00:00:00:00:03',
                              '192.168.1.4':'00:00:00:00:00:04',
                              '192.168.2.1':'00:00:00:00:00:05',
-                            '192.168.111.1':'10:00:00:00:00:00'}}
+                            '192.168.111.1':'10:00:00:00:00:00'}
+        }
+        self.gateway_arp_table = {                                                  # dpid -> ip
+            10 : '176.129.1.1',
+            11 : '176.129.1.2'
+        }
         self.host_pmac = {'00:00:00:00:00:01' : 1,                              # pmac -> tenant_id
                           '00:00:00:00:00:02' : 1,
                           '00:00:00:00:00:03' : 1,
@@ -60,8 +65,8 @@ class Controller(app_manager.RyuApp):
 
         # record possible gateways for this controller {gateway_id -> {port_no -> datacenter_id}}
         # if datacenter_id  == 0, then the port is for Internet
-        self.possible_gateways = {10 : {2 : 2},
-                                  11 : {2 : 2}}
+        self.possible_gateways = {10 : {2:2, 3:'NAT'},
+                                  11 : {2:2, 3:'NAT'}}
 
         # data in controller
         self.vmac_to_pmac = {}                              # {vmac -> pmac}
@@ -84,14 +89,19 @@ class Controller(app_manager.RyuApp):
                                           topo=self.switch_topo,
                                           DEFAULT_TTL=self.DEFAULT_TTL,
                                           port_speed=self.port_speed)
-        self.flow_manager = FlowModifier()
+        self.flow_manager = FlowModifier(datapathes=self.datapathes)
         self.mac_manager = MacManager(pmac_to_vmac=self.pmac_to_vmac,
                                       vmac_to_pmac=self.vmac_to_pmac,
                                       tenant_level=self.tenant_level)
         self.topoManager = TopoManager(topo=self.switch_topo,
-                                       dpid_to_dpid=self.dpid_to_dpid)
+                                       dpid_to_dpid=self.dpid_to_dpid,
+                                       gateways=self.gateways)
         self.arp_manager = ArpManager(arp_table=self.arp_table,
-                                      pmac_to_vmac=self.pmac_to_vmac)
+                                      pmac_to_vmac=self.pmac_to_vmac,
+                                      gateway_arp_table=self.gateway_arp_table,
+                                      dpid_to_vmac=self.dpid_to_vmac,
+                                      topo_manager=self.topoManager,
+                                      mac_manager=self.mac_manager)
         self.port_listener = PortListener(datapathes=self.datapathes,
                                           sleep_time=self.PORT_INQUIRY_TIME,
                                           dpid_to_dpid=self.dpid_to_dpid,
@@ -100,9 +110,12 @@ class Controller(app_manager.RyuApp):
         self.host_manager = HostManager(arp_table=self.arp_table,
                                         host_pmac=self.host_pmac)
         self.meter_manager = MeterModifier(meters=self.meters)
-        
-        # self.gateways_manager = GatewayManager(possibie_gatewats=self.possible_gateways,
-        #                                        gateways=self.gateways)
+
+        self.gateways_manager = GatewayManager(possibie_gatewats=self.possible_gateways,
+                                               gateways=self.gateways,
+                                               gateway_arp_table=self.gateway_arp_table,
+
+                                               flow_manager=self.flow_manager)
 
 
 
@@ -144,7 +157,6 @@ class Controller(app_manager.RyuApp):
         ofproto_parser = dp.ofproto_parser
         dpid = dp.id
 
-
         # when a switch connect
         if ev.state == MAIN_DISPATCHER:
             # check whether it connect twice
@@ -152,9 +164,13 @@ class Controller(app_manager.RyuApp):
                 return
 
             # install lldp packet flow entry, missing flow entry
-            self._register(dp)
             self.lldp_listener.install_lldp_flow(ev)
+            self._register(dp)
             self.flow_manager.install_missing_flow(ev)
+
+            # check whether this is a gateway
+            if dpid in self.possible_gateways.keys():
+                self.gateways_manager.register_gateway(dpid)
 
             return
 
@@ -196,16 +212,16 @@ class Controller(app_manager.RyuApp):
         elif type(special_pkt) == arp.arp:
             # test
             print('a arp packte is coming===============')
-            print(in_port)
             tenant_id = self.mac_manager.get_tenant_id_with_vmac(src)
             self.arp_manager.handle_arp(datapath=dp, in_port=in_port, pkt_ethernet=eth,
-                                        pkt_arp=special_pkt, tenant_id=1)
+                                        pkt_arp=special_pkt, tenant_id=tenant_id,
+                                        topoManager=self.topoManager,
+                                        whole_packet=pkt)
             return
 
         # check if the source has no record
         if not src in self.pmac_to_vmac.keys() and not src in self.vmac_to_pmac.keys():
             # first check whether this is pmac for host(not a vmac for host or switch, not a pmac for port that connect ovs)
-
             if src in self.host_pmac.keys():
                 # test
                 print('new host coming!!==============' + src)
@@ -229,61 +245,58 @@ class Controller(app_manager.RyuApp):
                     self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac)
                 self.flow_manager.transfer_dst_vmac_to_pmac(ev, src_vmac, src)
                 self.flow_manager.install_receiving_flow_entry(dp, src, in_port)
-
-            # send the packet if know the dst_vmac
-            # if dst in self.vmac_to_pmac.keys():
-            #     dst_vmac = self.vmac_to_pmac[dst]
-            #     # TODO should I install a flow entry here to (dst_pmac -> dst_vmac)?
-            #     dpid = self.mac_manager.get_dpid_with_vmac(dst_vmac)
-            #     datapath = self.datapathes[dpid]
-            #
-            #     # TODO add a flow entry avoid packet in next time
-            #     actions = [parser.OFPMatch(in_port=in_port, eth_dst=dst)]
-            #
-            #     # send the packet
-            #     ethertype = eth.ethertype
-            #     pkt.del_protocol(eth)
-            #     pkt.add_protocol_from_head(ethernet.ethernet(ethertype, dst=dst_vmac, src=src_vmac))
-            #     pkt.serialize()
-            #
-            #     datapath.send_msg(pkt)
-            #
-            #
-            #
-            # else:
-            #     # TODO check the ports which connects to a host and send the packet
-            #     print('unknow dst_mac')
-            #     return
         # if src is a vmac
         elif src in self.vmac_to_pmac.keys():
-            # if also has dst_vmac
+            # first check whether dst is a vmac
             if dst in self.vmac_to_pmac.keys():
-                dst_dpid = self.mac_manager.get_dpid_with_vmac(dst)
-                path = self.topoManager.get_path(dpid, dst_dpid)
-                # test
-                print('should be a ping packet==========================')
-                print(path)
-                # install flow entry for switches on path
-                for connect in path:
+                # then check whether it is in this datacenter
+                if self.mac_manager.get_datacenter_id_with_vmac(dst) == self.datacenter_id:
+                    # find the route
+                    dst_dpid = self.mac_manager.get_dpid_with_vmac(dst)
+                    path = self.topoManager.get_path(dpid, dst_dpid)
+                    # install flow entry for switches on path
+                    for connect in path:
                         datapath = self.datapathes[connect[0]]
                         port = connect[1]
                         self.flow_manager.install_wildcard_sending_flow(dp=datapath,
                                                                         out_port=port,
                                                                         dst_dpid=dst_dpid,
                                                                         buffer_id=msg.buffer_id)
+                    # finally send the packet
+                    if len(path) > 0:
+                        out_port = path[0][1]
+                        actions = [parser.OFPActionOutput(out_port)]
+                    else:
+                        actions = []
+                    data = None
+                    if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+                        data = msg.data
+                    out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
+                                                     in_port=in_port, actions=actions, data=data)
+                    dp.send_msg(out_packet)
 
-                # finally send the packet
-                if len(path) > 0:
-                    out_port = path[0][1]
-                    actions = [parser.OFPActionOutput(out_port)]
+                # if dst is not in this datacenter
                 else:
-                    actions = []
-                data = None
-                if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-                    data = msg.data
-                out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
-                                                 in_port=in_port, actions=actions, data=data)
-                dp.send_msg(out_packet)
+                    src_dpid = self.mac_manager.get_dpid_with_vmac(src)
+                    nearest_gateway = self.topoManager.get_nearest_gateway(src_dpid)
+                    path = self.topoManager.get_path(src_dpid, nearest_gateway)
+                    # install flow entry for switches on path
+                    for connect in path:
+                        datapath = self.datapathes[connect[0]]
+                        port = connect[1]
+
+            else:
+                print('Unkonown host for ' + dst)
+                return
+
+
+            # first check whether dst is in this datacenter
+            if self.mac_manager.get_datacenter_id_with_vmac(dst)
+            # if also has dst_vmac
+            if dst in self.vmac_to_pmac.keys():
+
+
+
 
             # TODO not simply drop the packet
             else:

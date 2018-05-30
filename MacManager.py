@@ -49,6 +49,9 @@ class MacManager(object):
     def get_tenant_id_with_vmac(self, vmac):
         return self._get_tenant_id(vmac)
 
+    def get_datacenter_id_with_vmac(self, vmac):
+        return self._get_datacenter_id(vmac)
+
     def _get_tenant_id(self, vmac):
         split = vmac.split(':')
         tenant_hex = split[1] + split[2]
@@ -58,6 +61,10 @@ class MacManager(object):
         split = vmac.split(':')
         dpid_hex = split[3] + split[4]
         return int(dpid_hex, 16)
+
+    def _get_datacenter_id(self, vmac):
+        datacenter_id_hex = vmac[0]
+        return int(datacenter_id_hex, 16)
 
     def _get_port_id(self, vmac):
         split = vmac.split(':')
@@ -78,6 +85,7 @@ class MacManager(object):
 
     def _generate_tenant_id_vmac(self, tenant_id):
         return self._generate_switch_id_vmac(tenant_id)
+
     def _generate_vm_id_vmac(self, port_id):
         assert(port_id < 256)
         hex_str = str(hex(port_id))
