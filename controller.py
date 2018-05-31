@@ -290,17 +290,7 @@ class Controller(app_manager.RyuApp):
                 return
 
 
-            # first check whether dst is in this datacenter
-            if self.mac_manager.get_datacenter_id_with_vmac(dst)
-            # if also has dst_vmac
-            if dst in self.vmac_to_pmac.keys():
 
-
-
-
-            # TODO not simply drop the packet
-            else:
-                return
 
         else:
             print('wrong logic for scr. ' + 'This packet is from ' + src + ' to ' + dst + ', the ovs is ' + dpid_to_str(dpid))

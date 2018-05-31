@@ -155,6 +155,7 @@ class FlowModifier(object):
                       table_id=0, buffer_id=None)
 
 
+
     def _get_switch_id_mask(self):
         return six.int2byte(0) * 3 + six.int2byte(255) * 2
 

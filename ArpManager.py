@@ -53,7 +53,6 @@ class ArpManager(object):
         # if there is record for this dst_ip, get dst_pmac from arp_table
         if dst_ip in self.arp_table[tenant_id].keys():
             dst_pmac = self.arp_table[tenant_id][dst_ip]
-        # else send it to the nearest gateway
         else:
             return
 
