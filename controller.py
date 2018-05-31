@@ -42,31 +42,40 @@ class Controller(app_manager.RyuApp):
         super(Controller, self).__init__(*args, **kwargs)
 
         # record for network configuration
-        self.arp_table = {1:{'192.168.1.1':'00:00:00:00:00:01',                 # {tenant_id ->{ip -> mac}}
-                          '192.168.1.2':'00:00:00:00:00:02',
-                             '192.168.1.3':'00:00:00:00:00:03',
+
+        # arp table for different tenants
+        self.arp_table = {1:{'191.168.1.1':'00:00:00:00:00:01',                 # {tenant_id ->{ip -> mac}}
+                          '191.168.1.2':'00:00:00:00:00:02',
+                             '191.168.1.3':'00:00:00:00:00:03',
                              '192.168.1.4':'00:00:00:00:00:04',
-                             '192.168.2.1':'00:00:00:00:00:05',
                             '192.168.111.1':'10:00:00:00:00:00'}
         }
+        # arp table for different datacenter
+        self.arp_table_datacenter = {                                               # {datacenter_id -> [ip]}
+            1 : ['191.168.1.1', '191.168.1.2', '191.168.1.3', '192.168.1.4', '192.168.111.1']
+        }
+
         self.gateway_arp_table = {                                                  # dpid -> ip
-            10 : '176.129.1.1',
-            11 : '176.129.1.2'
+            10 : '176.168.1.1'
         }
         self.host_pmac = {'00:00:00:00:00:01' : 1,                              # pmac -> tenant_id
                           '00:00:00:00:00:02' : 1,
                           '00:00:00:00:00:03' : 1,
                           '00:00:00:00:00:04' : 1,
-                          '00:00:00:00:00:05' : 1,
                           '10:00:00:00:00:00' : 1}
         self.tenant_level = {1 : 1}
         self.tenant_speed = {1 : 1024 * 8}
         self.datacenter_id = 1
+        self.subnet = {                                                           # {subnet_id -> 'ip/mask'}
+            1 : '191.168.1.1/16',
+            2 : '192.168.1.1/16'
+        }
 
-        # record possible gateways for this controller {gateway_id -> {port_no -> datacenter_id}}
+        # record possible gateways for this controller {gateway_id -> {port_no -> 'datacenter_id' / subnet_number / 'NAT'}}
         # if datacenter_id  == 0, then the port is for Internet
-        self.possible_gateways = {10 : {2:2, 3:'NAT'},
-                                  11 : {2:2, 3:'NAT'}}
+        self.possible_gateways = {
+            10 : {1:1, 2:1, 3:2, 4:'2', 5:'NAT'}
+        }
 
         # data in controller
         self.vmac_to_pmac = {}                              # {vmac -> pmac}
@@ -111,11 +120,19 @@ class Controller(app_manager.RyuApp):
                                         host_pmac=self.host_pmac)
         self.meter_manager = MeterModifier(meters=self.meters)
 
-        self.gateways_manager = GatewayManager(possibie_gatewats=self.possible_gateways,
+        self.gateways_manager = GatewayManager(datapathes=self.datapathes,
+                                               possibie_gatewats=self.possible_gateways,
                                                gateways=self.gateways,
                                                gateway_arp_table=self.gateway_arp_table,
-
-                                               flow_manager=self.flow_manager)
+                                               dpid_to_vmac=self.dpid_to_vmac,
+                                               flow_manager=self.flow_manager,
+                                               subnet=self.subnet,
+                                               mac_manager=self.mac_manager,
+                                               arp_table_datacenter=self.arp_table_datacenter,
+                                               datacenter_id=self.datacenter_id,
+                                               arp_table=self.arp_table,
+                                               pmac_to_vmac=self.pmac_to_vmac,
+                                               topo_manager=self.topoManager)
 
 
 
@@ -153,8 +170,6 @@ class Controller(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPStateChange, [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def switch_state_change_handler(self, ev):
         dp = ev.datapath
-        ofproto = dp.ofproto
-        ofproto_parser = dp.ofproto_parser
         dpid = dp.id
 
         # when a switch connect
@@ -166,11 +181,13 @@ class Controller(app_manager.RyuApp):
             # install lldp packet flow entry, missing flow entry
             self.lldp_listener.install_lldp_flow(ev)
             self._register(dp)
-            self.flow_manager.install_missing_flow(ev)
 
             # check whether this is a gateway
             if dpid in self.possible_gateways.keys():
                 self.gateways_manager.register_gateway(dpid)
+                self.flow_manager.install_missing_flow_for_gateway(ev)
+            else:
+                self.flow_manager.install_missing_flow(ev)
 
             return
 
@@ -180,14 +197,17 @@ class Controller(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packet_in_handler(self, ev):
-        # print('receive a packet')
-        # test
-        # print('a packet coming ==================')
         msg = ev.msg
         dp = msg.datapath
+        dpid = dp.id
+
+        # first check whether this ev is from gateway
+        if dpid in self.gateways.keys():
+            self.gateways_manager.gateway_packet_in_handler(ev)
+            return
+
         ofproto = dp.ofproto
         parser = dp.ofproto_parser
-        dpid = dp.id
         pkt = packet.Packet(msg.data)
 
         eth = pkt.get_protocols(ethernet.ethernet)[0]

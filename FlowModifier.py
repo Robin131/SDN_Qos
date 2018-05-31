@@ -48,6 +48,20 @@ class FlowModifier(object):
         self.add_flow(dp, 0, match, instruction1, table_id=1)
         self.add_flow(dp, 0, match, instruction2, table_id=2)
 
+    def install_missing_flow_for_gateway(self, ev):
+        dp = ev.datapath
+        ofproto = dp.ofproto
+        parser = dp.ofproto_parser
+
+        match = parser.OFPMatch()
+        actions = [parser.OFPActionOutput(
+            ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER
+        )]
+        instruction = [
+            parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
+        ]
+        self.add_flow(dp, 0, match, instruction, table_id=0)
+
     def transfer_src_pmac_to_vmac(self, ev, src, src_vmac, meter_id=None):
         msg = ev.msg
         datapath = msg.datapath
