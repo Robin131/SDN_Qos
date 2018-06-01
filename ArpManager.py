@@ -14,6 +14,10 @@ class ArpManager(object):
 
 
     def handle_arp(self, datapath, in_port, pkt_ethernet, pkt_arp, tenant_id, topoManager, whole_packet):
+
+        # test
+        print(str(pkt_arp.src_mac) + 'ask mac for ' + pkt_arp.dst_ip)
+
         parser = datapath.ofproto_parser
         dst_ip = pkt_arp.dst_ip
         if not pkt_arp.opcode == arp.ARP_REQUEST:
@@ -23,16 +27,18 @@ class ArpManager(object):
 
         # first check whether it is requesting a gateway mac
         if dst_ip in self.gateway_arp_table.values():
-            src_vmac = pkt_arp.src_mac
             gateway_id = -1
             for (key, value) in self.gateway_arp_table.items():
                 if value == dst_ip:
                     gateway_id = key
             gateway_vmac = self.dpid_to_vmac[gateway_id]
+            # test
+            print('reply ' + str(pkt_arp.src_mac) + ', the mac for ' + pkt_arp.dst_ip +
+                  ' is ' + str(gateway_vmac))
             # reply arp packet to src
             pkt = packet.Packet()
             pkt.add_protocol(ethernet.ethernet(ethertype=pkt_ethernet.ethertype,
-                                               dst=pkt_arp.src_mac, src=gateway_vmac))
+                                               dst=pkt_ethernet.src, src=gateway_vmac))
             pkt.add_protocol(arp.arp(opcode=arp.ARP_REPLY,
                                      src_mac=gateway_vmac,
                                      src_ip=pkt_arp.dst_ip,
@@ -67,7 +73,7 @@ class ArpManager(object):
         # fake a arp pkt and answer
         pkt = packet.Packet()
         pkt.add_protocol(ethernet.ethernet(ethertype=pkt_ethernet.ethertype,
-                                           dst=pkt_arp.src_mac, src=dst_vmac))
+                                           dst=pkt_ethernet.src, src=dst_vmac))
         pkt.add_protocol(arp.arp(opcode=arp.ARP_REPLY,
                                  src_mac=dst_vmac,
                                  src_ip=pkt_arp.dst_ip,

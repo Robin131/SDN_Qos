@@ -48,33 +48,41 @@ class Controller(app_manager.RyuApp):
                           '191.168.1.2':'00:00:00:00:00:02',
                              '191.168.1.3':'00:00:00:00:00:03',
                              '192.168.1.4':'00:00:00:00:00:04',
+                            '191.168.1.4':'00:00:00:00:00:05',
                             '192.168.111.1':'10:00:00:00:00:00'}
         }
         # arp table for different datacenter
         self.arp_table_datacenter = {                                               # {datacenter_id -> [ip]}
-            1 : ['191.168.1.1', '191.168.1.2', '191.168.1.3', '192.168.1.4', '192.168.111.1']
+            1 : ['191.168.1.1', '191.168.1.2', '191.168.1.3', '191.168.1.4', '192.168.1.4', '192.168.111.1']
         }
 
         self.gateway_arp_table = {                                                  # dpid -> ip
-            10 : '176.168.1.1'
+            10 : '191.1.1.1',
+            11 : '192.1.1.1'
         }
         self.host_pmac = {'00:00:00:00:00:01' : 1,                              # pmac -> tenant_id
                           '00:00:00:00:00:02' : 1,
                           '00:00:00:00:00:03' : 1,
                           '00:00:00:00:00:04' : 1,
+                          '00:00:00:00:00:05' : 1,
                           '10:00:00:00:00:00' : 1}
         self.tenant_level = {1 : 1}
         self.tenant_speed = {1 : 1024 * 8}
         self.datacenter_id = 1
         self.subnet = {                                                           # {subnet_id -> 'ip/mask'}
-            1 : '191.168.1.1/16',
-            2 : '192.168.1.1/16'
+            1 : '191.168.1.1/8',
+            2 : '192.168.1.1/8'
         }
 
         # record possible gateways for this controller {gateway_id -> {port_no -> 'datacenter_id' / subnet_number / 'NAT'}}
         # if datacenter_id  == 0, then the port is for Internet
         self.possible_gateways = {
-            10 : {1:1, 2:1, 3:2, 4:'2', 5:'NAT'}
+            10 : {1:1, 2:1, 3:2, 4:'2', 5:'NAT'},
+            11 : {1:2, 2:1, 3:'2', 4:'NAT'}
+        }
+        self.gateway_in_subnet = {
+            10 : 1,
+            11 : 2
         }
 
         # data in controller
@@ -88,7 +96,7 @@ class Controller(app_manager.RyuApp):
         self.port_speed = {}                                # {dpid -> {port_id -> 'cur_speed', 'max_speed'}}
         self.meters = {}                                    # {dpid -> {meter_id -> band_id}}
         self.gateways = {}                                  # {dpid -> {port_no -> datacenter_id}}
-        self.gateway_mac = {}                               # {dpid -> pmac}
+        self.gateway_vmac = {}                               # {dpid -> vmac}
 
         # components
         # self.utils = U.Utils()
@@ -132,7 +140,8 @@ class Controller(app_manager.RyuApp):
                                                datacenter_id=self.datacenter_id,
                                                arp_table=self.arp_table,
                                                pmac_to_vmac=self.pmac_to_vmac,
-                                               topo_manager=self.topoManager)
+                                               topo_manager=self.topoManager,
+                                               gateway_in_subnet=self.gateway_in_subnet)
 
 
 
@@ -156,7 +165,6 @@ class Controller(app_manager.RyuApp):
         vmac = self.mac_manager.get_vmac_new_switch(datapath=dpid,
                                                     datacenter_id=self.datacenter_id)
 
-        #self.pmac_to_vmac[]
         self.dpid_to_vmac[dpid] = vmac
         self.lldp_listener.lldp_detect(datapath)
 
@@ -201,11 +209,6 @@ class Controller(app_manager.RyuApp):
         dp = msg.datapath
         dpid = dp.id
 
-        # first check whether this ev is from gateway
-        if dpid in self.gateways.keys():
-            self.gateways_manager.gateway_packet_in_handler(ev)
-            return
-
         ofproto = dp.ofproto
         parser = dp.ofproto_parser
         pkt = packet.Packet(msg.data)
@@ -214,10 +217,9 @@ class Controller(app_manager.RyuApp):
         dst = eth.dst
         src = eth.src
         in_port = msg.match['in_port']
-        # test
-        # print('This packet is from ' + src + ' to ' + dst + ', the ovs is ' + dpid_to_str(dpid))
 
         # check the protocol
+        # ethernet protocol
         i = iter(pkt)
         eth_pkt = six.next(i)
         assert type(eth_pkt) == ethernet.ethernet
@@ -237,6 +239,11 @@ class Controller(app_manager.RyuApp):
                                         pkt_arp=special_pkt, tenant_id=tenant_id,
                                         topoManager=self.topoManager,
                                         whole_packet=pkt)
+            return
+
+        # then check whether this ev is from gateway (not arp and lldp)
+        if dpid in self.gateways.keys():
+            self.gateways_manager.gateway_packet_in_handler(ev)
             return
 
         # check if the source has no record
@@ -265,23 +272,23 @@ class Controller(app_manager.RyuApp):
                     self.flow_manager.transfer_src_pmac_to_vmac(ev, src, src_vmac)
                 self.flow_manager.transfer_dst_vmac_to_pmac(ev, src_vmac, src)
                 self.flow_manager.install_receiving_flow_entry(dp, src, in_port)
-        # if src is a vmac
+
+        # if src is a vmac, which means this host has been registered
         elif src in self.vmac_to_pmac.keys():
-            # first check whether dst is a vmac
+            # first check whether dst is a host vmac
             if dst in self.vmac_to_pmac.keys():
                 # then check whether it is in this datacenter
                 if self.mac_manager.get_datacenter_id_with_vmac(dst) == self.datacenter_id:
                     # find the route
                     dst_dpid = self.mac_manager.get_dpid_with_vmac(dst)
                     path = self.topoManager.get_path(dpid, dst_dpid)
-                    # install flow entry for switches on path
-                    for connect in path:
-                        datapath = self.datapathes[connect[0]]
-                        port = connect[1]
-                        self.flow_manager.install_wildcard_sending_flow(dp=datapath,
-                                                                        out_port=port,
-                                                                        dst_dpid=dst_dpid,
-                                                                        buffer_id=msg.buffer_id)
+                    # install flow entry for only this switch
+                    datapath = self.datapathes[dpid]
+                    port = path[0][1]
+                    self.flow_manager.install_wildcard_sending_flow(dp=datapath,
+                                                                    out_port=port,
+                                                                    dst_dpid=dst_dpid,
+                                                                    buffer_id=msg.buffer_id)
                     # finally send the packet
                     if len(path) > 0:
                         out_port = path[0][1]
@@ -305,8 +312,16 @@ class Controller(app_manager.RyuApp):
                         datapath = self.datapathes[connect[0]]
                         port = connect[1]
 
+            # then check whether dst is a gateway vmac
+            elif :
+
+                return
+
+
             else:
-                print('Unkonown host for ' + dst)
+                # TODO what iare those 33:00.... mac ?
+                # print(str(src) + ' to ' + dst)
+                # print('Unkonown host for ' + dst)
                 return
 
 
