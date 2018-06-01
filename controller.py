@@ -70,8 +70,8 @@ class Controller(app_manager.RyuApp):
         self.tenant_speed = {1 : 1024 * 8}
         self.datacenter_id = 1
         self.subnet = {                                                           # {subnet_id -> 'ip/mask'}
-            1 : '191.168.1.1/8',
-            2 : '192.168.1.1/8'
+            1 : '191.0.0.0/8',
+            2 : '192.0.0.0/8'
         }
 
         # record possible gateways for this controller {gateway_id -> {port_no -> 'datacenter_id' / subnet_number / 'NAT'}}
@@ -141,7 +141,8 @@ class Controller(app_manager.RyuApp):
                                                arp_table=self.arp_table,
                                                pmac_to_vmac=self.pmac_to_vmac,
                                                topo_manager=self.topoManager,
-                                               gateway_in_subnet=self.gateway_in_subnet)
+                                               gateway_in_subnet=self.gateway_in_subnet,
+                                               gateway_vmac=self.gateway_vmac)
 
 
 
@@ -275,10 +276,18 @@ class Controller(app_manager.RyuApp):
 
         # if src is a vmac, which means this host has been registered
         elif src in self.vmac_to_pmac.keys():
-            # first check whether dst is a host vmac
-            if dst in self.vmac_to_pmac.keys():
+            # first check whether dst is a host vmac or is a gateway vmac
+            # TODO if the host is in other datacenter
+            if dst in self.vmac_to_pmac.keys() or dst in self.gateway_vmac.values():
                 # then check whether it is in this datacenter
                 if self.mac_manager.get_datacenter_id_with_vmac(dst) == self.datacenter_id:
+                    # test
+                    print('pkt from ' + src + ' to ' + dst)
+
+                    # test
+                    if dst == self.gateway_vmac[10]:
+                        print('test pass')
+
                     # find the route
                     dst_dpid = self.mac_manager.get_dpid_with_vmac(dst)
                     path = self.topoManager.get_path(dpid, dst_dpid)
@@ -311,12 +320,6 @@ class Controller(app_manager.RyuApp):
                     for connect in path:
                         datapath = self.datapathes[connect[0]]
                         port = connect[1]
-
-            # then check whether dst is a gateway vmac
-            elif :
-
-                return
-
 
             else:
                 # TODO what iare those 33:00.... mac ?

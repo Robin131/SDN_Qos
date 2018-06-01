@@ -32,6 +32,10 @@ class GatewayManager(object):
     def register_gateway(self, dpid):
         self.gateways[dpid] = self.possible_gateways[dpid]
         self.gateway_vmac[dpid] = self.dpid_to_vmac[dpid]
+
+        print(self.gateways)
+        print(self.gateway_vmac)
+
         # for (port_no, dst) in self.gateways[dpid].items():
         #     # datacenter
         #     if dst != 'NAT':
@@ -56,13 +60,13 @@ class GatewayManager(object):
     def _get_out_port_with_ip(self, ip, dpid):
         # first look for the subnet id for ip
         subnet_id = -1
-        for (id, ip_address) in self.subnet:
+        for (id, ip_address) in self.subnet.items():
             if ip in IPy.IP(ip_address):
                 subnet_id = id
             else:
                 continue
         ports = []
-        for (port_no, dst) in self.gateways[dpid]:
+        for (port_no, dst) in self.gateways[dpid].items():
             if dst == subnet_id:
                 ports.append(port_no)
             else:
@@ -71,7 +75,7 @@ class GatewayManager(object):
 
     # get id of datacenter who has this ip
     def _get_datacenter_id_with_ip(self, ip):
-        for key in self.arp_table_datacenter:
+        for key in self.arp_table_datacenter.keys():
             if ip in self.arp_table_datacenter[key]:
                 return key
             else:
@@ -80,7 +84,7 @@ class GatewayManager(object):
 
     # get port_no to a certain datacenter on a certain gateway
     def _get_port_no_for_datacenter(self, datacenter_id, gateway_id):
-        for (port_no, dst) in self.gateways[gateway_id]:
+        for (port_no, dst) in self.gateways[gateway_id].items():
             if dst == datacenter_id:
                 return port_no
             else:
@@ -88,7 +92,7 @@ class GatewayManager(object):
         return -1
 
     def _get_subnet_with_ip(self, ip):
-        for (id, mask) in self.subnet:
+        for (id, mask) in self.subnet.items():
             if ip in IPy.IP(mask):
                 return id
             else:
@@ -124,7 +128,7 @@ class GatewayManager(object):
         # may 1.come from different subnet 2.Internet or other datacenters 3.come from this subnet to other subnet
         # send with vmac instead of ip address
         if dst_datacenter_id == self.datacenter_id:
-            # first check whether src is in this subnet
+            # first check whether dst is in this subnet
             this_subnet_id = self.gateway_in_subnet[dpid]
             dst_subnet_id = self._get_subnet_with_ip(dst_ip)
 
@@ -140,9 +144,9 @@ class GatewayManager(object):
 
                 # install sending flow entry
                 out_port = path[0][1]
-                match = parser.OFPMatch(dst_ip=dst_ip)
+                match = parser.OFPMatch(eth_type=0x800, ipv4_dst=dst_ip)
                 actions = [
-                    parser.OFPActionSerField(eth_dst=vmac),
+                    parser.OFPActionSetField(eth_dst=vmac),
                     parser.OFPActionOutput(out_port)
                 ]
                 instruction = [
@@ -166,8 +170,8 @@ class GatewayManager(object):
             else:
                 # install flow entry
                 # TODO use wildcard here to reduce flow entry
-                out_port = self._get_out_port_with_ip(dst_ip, dpid)
-                match = parser.parser.OFPMatch(dst_ip=dst_ip)
+                out_port = self._get_out_port_with_ip(dst_ip, dpid)[0]
+                match = parser.OFPMatch(eth_type=0x800, ipv4_dst=dst_ip)
                 actions = [
                     parser.OFPActionOutput(out_port)
                 ]
@@ -197,7 +201,7 @@ class GatewayManager(object):
                 return
             # install flow entry
             # TODO use wildcard here to reduce flow entry
-            match = parser.OFPMatch(dst_ip=dst_ip)
+            match = parser.OFPMatch(eth_type=0x800, ipv4_dst=dst_ip)
             actions = [
                 parser.OFPActionOutput(out_port)
             ]

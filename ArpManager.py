@@ -16,7 +16,7 @@ class ArpManager(object):
     def handle_arp(self, datapath, in_port, pkt_ethernet, pkt_arp, tenant_id, topoManager, whole_packet):
 
         # test
-        print(str(pkt_arp.src_mac) + 'ask mac for ' + pkt_arp.dst_ip)
+        print(str(pkt_arp.src_mac) + ' ask mac for ' + pkt_arp.dst_ip)
 
         parser = datapath.ofproto_parser
         dst_ip = pkt_arp.dst_ip
@@ -38,7 +38,7 @@ class ArpManager(object):
             # reply arp packet to src
             pkt = packet.Packet()
             pkt.add_protocol(ethernet.ethernet(ethertype=pkt_ethernet.ethertype,
-                                               dst=pkt_ethernet.src, src=gateway_vmac))
+                                               dst=pkt_arp.src_mac, src=gateway_vmac))
             pkt.add_protocol(arp.arp(opcode=arp.ARP_REPLY,
                                      src_mac=gateway_vmac,
                                      src_ip=pkt_arp.dst_ip,
@@ -73,7 +73,7 @@ class ArpManager(object):
         # fake a arp pkt and answer
         pkt = packet.Packet()
         pkt.add_protocol(ethernet.ethernet(ethertype=pkt_ethernet.ethertype,
-                                           dst=pkt_ethernet.src, src=dst_vmac))
+                                           dst=pkt_arp.src_mac, src=dst_vmac))
         pkt.add_protocol(arp.arp(opcode=arp.ARP_REPLY,
                                  src_mac=dst_vmac,
                                  src_ip=pkt_arp.dst_ip,
