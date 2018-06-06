@@ -10,7 +10,7 @@ from ryu.lib.packet import packet, ethernet, ipv4
 class GatewayManager(object):
     def __init__(self, datapathes, possibie_gatewats, arp_table_datacenter, gateways, gateway_arp_table, dpid_to_vmac,
                  flow_manager, subnet, mac_manager, datacenter_id, arp_table, pmac_to_vmac,
-                 topo_manager, gateway_in_subnet, gateway_vmac):
+                 topo_manager, gateway_in_subnet, gateway_vmac, datacenter_sunbet):
         super(GatewayManager, self)
 
         self.datapathes = datapathes
@@ -28,26 +28,39 @@ class GatewayManager(object):
         self.topo_manager = topo_manager
         self.gateway_in_subnet = gateway_in_subnet
         self.gateway_vmac = gateway_vmac
+        self.datacenter_sunbet = datacenter_sunbet
 
     def register_gateway(self, dpid):
+
+        # add gateway
         self.gateways[dpid] = self.possible_gateways[dpid]
         self.gateway_vmac[dpid] = self.dpid_to_vmac[dpid]
 
-        print(self.gateways)
-        print(self.gateway_vmac)
+        # add flow entry for each port
+        # for other subnet port, add flow according to ip wildcard
+        # for datacenter port, add flow entry according to ip wildcard
+        # send other pkt to Internet port
+        for (port_no, dst) in self.gateways[dpid].items():
+            # datacenter port or Internet port
+            if type(dst) == type('1'):
+                if dst == 'NAT':
+                    # TODO should send all default pkt to NAT?
+                    continue
+                else:
+                    datacenter_id = int(dst)
+                    for subnet in self.datacenter_sunbet[datacenter_id]:
+                        self.flow_manager.install_ip_wildcard_flow_with_subnet_ip(dpid=dpid,
+                                                                                  subnet_ip=self.subnet[subnet],
+                                                                                  out_port=port_no)
+                    continue
+            # different subnet port
+            else:
+                subnet_ip = self.subnet[dst]
+                self.flow_manager.install_ip_wildcard_flow_with_subnet_ip(dpid=dpid,
+                                                                          subnet_ip=subnet_ip,
+                                                                          out_port=port_no)
+                continue
 
-        # for (port_no, dst) in self.gateways[dpid].items():
-        #     # datacenter
-        #     if dst != 'NAT':
-        #         self.flow_manager.install_datacenter_flow(self, dst, port_no, dpid)
-        #         return
-        #     # Internet (Nat)
-        #     else:
-        #         gateway_vmac = self.dpid_to_vmac[dpid]
-        #         self.flow_manager.install_internet_flow(gateway_vmac=gateway_vmac,
-        #                                                 out_port=port_no,
-        #                                                 gateway_id=dpid)
-        #         return
 
     def get_internet_port(self, gateway_id):
         for (port_no, dst) in self.gateways[gateway_id].items():

@@ -1,10 +1,18 @@
 from mininet.topo import Topo
+from mininet.nodelib import NAT
+
 
 
 class MyTopo(Topo):
 
-    def __init__(self):
-        Topo.__init__(self)
+    def build(self):
+        self.hostNum = 5
+        self.switchNum = 6
+        self.addTopo()
+
+
+
+    def addTopo(self):
 
         host1 = self.addHost('h1', ip="191.168.1.1")
         host2 = self.addHost('h2', ip="191.168.1.2")
@@ -19,6 +27,9 @@ class MyTopo(Topo):
 
         gateway1 = self.addSwitch('g1', ip="191.1.1.1", dpid='A')
         gateway2 = self.addSwitch('g2', ip="192.1.1.1", dpid='B')
+
+        nat1 = self.addNode('n1', cls=NAT, ip='191.0.0.1', inNamespace=False)
+        nat2 = self.addNode('n2', cls=NAT, ip='192.0.0.1', inNamespace=False)
 
         # host - switch
         self.addLink(host1, switch1, 1, 1)
@@ -39,19 +50,9 @@ class MyTopo(Topo):
         # gateway - gateway
         self.addLink(gateway1, gateway2, 3, 2)
 
-
-# h1 h2 h3 belongs to same subnet 191
-# h4 belongs to subnet 192
-
-#  Datacenter A
-#  h1----s1-----g1-------Datacenter b
-#       --  -   -  --
-#     --     -  -    --
-#  h2-        -s2      --s3 --------h4
-#               -
-#               -
-#               h3
-
+        # gateway - NAT
+        self.addLink(gateway1, nat1, 5, 1)
+        self.addLink(gateway2, nat2, 4, 1)
 
 
 topos = {'mytopo': (lambda: MyTopo())}

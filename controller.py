@@ -84,6 +84,12 @@ class Controller(app_manager.RyuApp):
             10 : 1,
             11 : 2
         }
+        # record subnet for every datacenter
+        # datacenter_id -> [subnet_id]
+        self.datacenter_subnet = {
+            1 : [1, 2],
+            2 : []
+        }
 
         # data in controller
         self.vmac_to_pmac = {}                              # {vmac -> pmac}
@@ -142,7 +148,8 @@ class Controller(app_manager.RyuApp):
                                                pmac_to_vmac=self.pmac_to_vmac,
                                                topo_manager=self.topoManager,
                                                gateway_in_subnet=self.gateway_in_subnet,
-                                               gateway_vmac=self.gateway_vmac)
+                                               gateway_vmac=self.gateway_vmac,
+                                               datacenter_sunbet=self.datacenter_subnet)
 
 
 
@@ -194,7 +201,7 @@ class Controller(app_manager.RyuApp):
             # check whether this is a gateway
             if dpid in self.possible_gateways.keys():
                 self.gateways_manager.register_gateway(dpid)
-                self.flow_manager.install_missing_flow_for_gateway(ev)
+                # self.flow_manager.install_missing_flow_for_gateway(ev)
             else:
                 self.flow_manager.install_missing_flow(ev)
 

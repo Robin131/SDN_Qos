@@ -137,37 +137,20 @@ class FlowModifier(object):
         self.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
                       table_id=table_id, buffer_id=buffer_id)
 
-    # install sending flow for datacenter on gateway
-    def install_datacenter_flow(self, datacenter_id, port_no, gateway_id):
-        gateway = self.daatapathes[gateway_id]
-        parser = gateway.ofproto_parser
-        ofproto = gateway.ofproto
-        match = parser.OFPMatch()
 
-        match.append_field(header=ofp_13.OXM_OF_ETH_DST_W,
-                           mask=self._get_datacenter_id_mask(),
-                           value=self._get_datacenter_id_value(datacenter_id)
-                           )
-        actions = [parser.OFPActionOutput(port_no)]
-        instructions = [parser.OFPInstructionActions(
-            ofproto.OFPIT_APPLY_ACTIONS, actions
-        )]
-        self.add_flow(datapath=gateway, priority=2, match=match, instructions=instructions,
-                      table_id=0, buffer_id=None)
+    # install ip wildcard flow entry for gateway according to subnet ip
+    def install_ip_wildcard_flow_with_subnet_ip(self, dpid, subnet_ip, out_port):
+        dp = self.daatapathes[dpid]
+        parser = dp.ofproto_parser
+        ofproto = dp.ofproto
 
-    # install sending flow for internet (NAT) pkt
-    def install_internet_flow(self, gateway_vmac, out_port, gateway_id):
-        gateway = self.daatapathes[gateway_id]
-        parser = gateway.ofproto_parser
-        ofproto = gateway.ofproto
-        match = parser.OFPMatch(eth_dst=gateway_vmac)
-        actions = [parser.OFPActionOutput(out_port)]
-        instructions = [parser.OFPInstructionActions(
-            ofproto.OFPIT_APPLY_ACTIONS, actions
-        )]
-        self.add_flow(datapath=gateway, priority=1, match=match, instructions=instructions,
-                      table_id=0, buffer_id=None)
+        match = parser.OFPMatch(eth_type=0x800)
+        match.append_field(header=ofp_13.OXM_OF_IPV4_DST,
+                           mask=self._get_sunbet_ip_mask(subnet_ip),
+                           value=self._get_sunbet_ip_value(subnet_ip))
 
+
+        return
 
 
     def _get_switch_id_mask(self):
@@ -184,3 +167,10 @@ class FlowModifier(object):
         assert datacenter_id < 16
         return six.int2byte(datacenter_id * 16)
 
+    def _get_sunbet_ip_mask(self, subnet_ip):
+        unit = int(subnet_ip.split('/')[1])
+        return six.int2byte(15) * unit
+
+    def _get_subnet_ip_value(self, subnet_ip):
+        ip = subnet_ip.split('/')[0]
+        # TODO
