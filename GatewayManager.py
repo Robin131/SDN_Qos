@@ -44,7 +44,7 @@ class GatewayManager(object):
             # datacenter port or Internet port
             if type(dst) == type('1'):
                 if dst == 'NAT':
-                    # TODO should send all default pkt to NAT?
+                    self.flow_manager
                     continue
                 else:
                     datacenter_id = int(dst)

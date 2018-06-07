@@ -6,7 +6,7 @@ import math
 class FlowModifier(object):
     def __init__(self, datapathes):
         super(FlowModifier, self).__init__()
-        self.daatapathes = datapathes
+        self.datapathes = datapathes
 
     def add_flow(self, datapath, priority,
                  match, instructions, table_id=0, buffer_id=None):
@@ -140,17 +140,38 @@ class FlowModifier(object):
 
     # install ip wildcard flow entry for gateway according to subnet ip
     def install_ip_wildcard_flow_with_subnet_ip(self, dpid, subnet_ip, out_port):
-        dp = self.daatapathes[dpid]
+        dp = self.datapathes[dpid]
         parser = dp.ofproto_parser
         ofproto = dp.ofproto
 
         match = parser.OFPMatch(eth_type=0x800)
         match.append_field(header=ofp_13.OXM_OF_IPV4_DST,
                            mask=self._get_sunbet_ip_mask(subnet_ip),
-                           value=self._get_sunbet_ip_value(subnet_ip))
+                           value=self._get_subnet_ip_value(subnet_ip))
+        actions = [parser.OFPActionOutput(out_port)]
+        instruction = [parser.OFPInstructionActions(
+            ofproto.OFPIT_APPLY_ACTIONS, actions
+        )]
+        self.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
+                      table_id=0, buffer_id=None)
 
 
         return
+
+    # install missing flow entry for gateway (send to Nat directly)
+    def intall_missing_flow_entry_for_gateway(self, gateway_id, nat_port):
+        dp = self.datapathes[gateway_id]
+        parser = dp.ofproto_parser
+        ofproto = dp.ofproto
+
+        match = parser.OFPMatch()
+        actions = [parser.OFPActionOutput(nat_port)]
+        instruction = [parser.OFPInstructionActions(
+            ofproto.OFPIT_APPLY_ACTIONS, actions
+        )]
+        self.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
+                      table_id=0, buffer_id=None)
+
 
 
     def _get_switch_id_mask(self):
@@ -173,4 +194,27 @@ class FlowModifier(object):
 
     def _get_subnet_ip_value(self, subnet_ip):
         ip = subnet_ip.split('/')[0]
+        mask_num = subnet_ip.split('/')[1]
+
+        quotient = mask_num // 8
+        remainder = mask_num % 8
+
+        res = ''
+
+        for i in range(quotient):
+            res += six.int2byte(int(ip[i]))
+
+        end = int(ip[quotient])
+
+        k = 7
+        temp = 0
+        for i in range(remainder):
+            temp += 2**k
+            k -= 1
+
+        mask_end = end & temp
+
+        return res + six.int2byte(mask_end)
+
+
         # TODO
