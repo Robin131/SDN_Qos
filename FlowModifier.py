@@ -57,10 +57,19 @@ class FlowModifier(object):
         actions = [parser.OFPActionOutput(
             ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER
         )]
-        instruction = [
-            parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
+        instruction0 = [
+            parser.OFPInstructionGotoTable(table_id=1)
         ]
-        self.add_flow(dp, 0, match, instruction, table_id=0)
+        instruction1 = [
+            parser.OFPInstructionGotoTable(table_id=2)
+        ]
+        instruction2 = [
+            parser.OFPInstructionGotoTable(table_id=3)
+        ]
+        self.add_flow(dp, 0, match, instruction0)
+        self.add_flow(dp, 0, match, instruction1, table_id=1)
+        self.add_flow(dp, 0, match, instruction2, table_id=2)
+
 
     def transfer_src_pmac_to_vmac(self, ev, src, src_vmac, meter_id=None):
         msg = ev.msg
@@ -138,41 +147,6 @@ class FlowModifier(object):
                       table_id=table_id, buffer_id=buffer_id)
 
 
-    # install ip wildcard flow entry for gateway according to subnet ip
-    def install_ip_wildcard_flow_with_subnet_ip(self, dpid, subnet_ip, out_port):
-        dp = self.datapathes[dpid]
-        parser = dp.ofproto_parser
-        ofproto = dp.ofproto
-
-        match = parser.OFPMatch(eth_type=0x800)
-        match.append_field(header=ofp_13.OXM_OF_IPV4_DST,
-                           mask=self._get_sunbet_ip_mask(subnet_ip),
-                           value=self._get_subnet_ip_value(subnet_ip))
-        actions = [parser.OFPActionOutput(out_port)]
-        instruction = [parser.OFPInstructionActions(
-            ofproto.OFPIT_APPLY_ACTIONS, actions
-        )]
-        self.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
-                      table_id=0, buffer_id=None)
-
-
-        return
-
-    # install missing flow entry for gateway (send to Nat directly)
-    def intall_missing_flow_entry_for_gateway(self, gateway_id, nat_port):
-        dp = self.datapathes[gateway_id]
-        parser = dp.ofproto_parser
-        ofproto = dp.ofproto
-
-        match = parser.OFPMatch()
-        actions = [parser.OFPActionOutput(nat_port)]
-        instruction = [parser.OFPInstructionActions(
-            ofproto.OFPIT_APPLY_ACTIONS, actions
-        )]
-        self.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
-                      table_id=0, buffer_id=None)
-
-
 
     def _get_switch_id_mask(self):
         return six.int2byte(0) * 3 + six.int2byte(255) * 2
@@ -190,19 +164,37 @@ class FlowModifier(object):
 
     def _get_sunbet_ip_mask(self, subnet_ip):
         unit = int(subnet_ip.split('/')[1])
-        return six.int2byte(15) * unit
+        quotient = unit // 8
+        remainder = unit % 8
+
+        for i in range(quotient):
+            if i == 0:
+                res = six.int2byte(255)
+            else:
+                res += six.int2byte(255)
+
+        k = 7
+        temp = 0
+        for i in range(remainder):
+            temp += 2 ** k
+            k -= 1
+
+        return res + six.int2byte(temp)
+
 
     def _get_subnet_ip_value(self, subnet_ip):
         ip = subnet_ip.split('/')[0]
-        mask_num = subnet_ip.split('/')[1]
+        mask_num = int(subnet_ip.split('/')[1])
 
         quotient = mask_num // 8
         remainder = mask_num % 8
 
-        res = ''
 
         for i in range(quotient):
-            res += six.int2byte(int(ip[i]))
+            if i == 0:
+                res = six.int2byte(int(ip[i]))
+            else:
+                res += six.int2byte(int(ip[i]))
 
         end = int(ip[quotient])
 
@@ -213,6 +205,9 @@ class FlowModifier(object):
             k -= 1
 
         mask_end = end & temp
+
+        # test
+        print(str(res))
 
         return res + six.int2byte(mask_end)
 

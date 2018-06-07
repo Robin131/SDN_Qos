@@ -80,6 +80,7 @@ class Controller(app_manager.RyuApp):
             10 : {1:1, 2:1, 3:2, 4:'2', 5:'NAT'},
             11 : {1:2, 2:1, 3:'2', 4:'NAT'}
         }
+        # record which subnet the gateway is in
         self.gateway_in_subnet = {
             10 : 1,
             11 : 2
@@ -201,7 +202,7 @@ class Controller(app_manager.RyuApp):
             # check whether this is a gateway
             if dpid in self.possible_gateways.keys():
                 self.gateways_manager.register_gateway(dpid)
-                # self.flow_manager.install_missing_flow_for_gateway(ev)
+                self.flow_manager.install_missing_flow_for_gateway(ev)
             else:
                 self.flow_manager.install_missing_flow(ev)
 
