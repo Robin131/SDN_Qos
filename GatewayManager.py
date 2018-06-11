@@ -44,6 +44,22 @@ class GatewayManager(object):
         parser = gateway.ofproto_parser
         ofproto = gateway.ofproto
 
+        # first find which port is the outer port(connect to own subnet)
+        outer_ports = []
+        for (port_no, dst) in self.gateways[dpid].items():
+            if dst != self.gateway_in_subnet[dpid]:
+                outer_ports.append(port_no)
+
+        # drop all pkts from outer port in table 0 if they cannot match any inner host
+        for port in outer_ports:
+            match = parser.OFPMatch(in_port=port)
+            actions = []
+            instruction = [
+                parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
+            ]
+            self.flow_manager.add_flow(datapath=gateway, priority=1, match=match, instructions=instruction,
+                                       table_id=0, buffer_id=None)
+
         # add flow entry for each port
         # for other subnet port, add flow according to ip wildcard
         # for datacenter port, add flow entry according to ip wildcard
@@ -56,7 +72,7 @@ class GatewayManager(object):
                     actions = [
                         parser.OFPActionSetField(eth_dst='00:00:00:00:00:06'),
                         parser.OFPActionOutput(port_no),
-                        parser.OFPActionOutput(ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER)
+                        # parser.OFPActionOutput(ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER)
                     ]
                     instruction = [
                         parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
@@ -68,7 +84,7 @@ class GatewayManager(object):
                 else:
                     datacenter_id = int(dst)
                     for subnet in self.datacenter_sunbet[datacenter_id]:
-                        subnet_ip = self.subnet[dst]
+                        subnet_ip = self.subnet[subnet]
                         match = parser.OFPMatch(eth_type=0x800, ipv4_dst=subnet_ip)
                         actions = [parser.OFPActionOutput(port_no)]
                         instruction = [
@@ -87,10 +103,11 @@ class GatewayManager(object):
                     actions = [parser.OFPActionOutput(port_no)]
                     instruction = [
                         parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
-                        # parser.OFPInstructionGotoTable(table_id=2)
+                        parser.OFPInstructionGotoTable(table_id=2)
                     ]
-                    self.flow_manager.add_flow(datapath=gateway, priority=1, match=match, instructions=instruction,
+                    self.flow_manager.add_flow(datapath=gateway, priority=2, match=match, instructions=instruction,
                                 table_id=1, buffer_id=None)
+
 
     def get_internet_port(self, gateway_id):
         for (port_no, dst) in self.gateways[gateway_id].items():
