@@ -2,7 +2,8 @@ from ryu.lib.packet import arp
 from ryu.lib.packet import packet, ethernet
 
 class ArpManager(object):
-    def __init__(self, arp_table, pmac_to_vmac, gateway_arp_table, dpid_to_vmac, topo_manager, mac_manager):
+    def __init__(self, arp_table, pmac_to_vmac, gateway_arp_table, dpid_to_vmac, topo_manager,
+                 mac_manager, NAT_ip_mac):
         super(ArpManager, self).__init__()
 
         self.arp_table = arp_table
@@ -11,6 +12,7 @@ class ArpManager(object):
         self.dpid_to_vmac = dpid_to_vmac
         self.topo_manager = topo_manager
         self.mac_manager = mac_manager
+        self.NAT_ip_mac = NAT_ip_mac
 
 
     def handle_arp(self, datapath, in_port, pkt_ethernet, pkt_arp, tenant_id, topoManager, whole_packet):
@@ -20,6 +22,8 @@ class ArpManager(object):
 
         parser = datapath.ofproto_parser
         dst_ip = pkt_arp.dst_ip
+        src_ip = pkt_arp.src_ip
+        dst_pmac = ''
         if not pkt_arp.opcode == arp.ARP_REQUEST:
             # TODO deal with arp reply becuase there is something wired in Ping process
             print('Its a reply from ' + pkt_ethernet.src + ' and is to ' + dst_ip)
@@ -54,13 +58,22 @@ class ArpManager(object):
             datapath.send_msg(out)
             return
 
-        # it is requesting a host ip
-        dst_pmac = ''
-        # if there is record for this dst_ip, get dst_pmac from arp_table
-        if dst_ip in self.arp_table[tenant_id].keys():
-            dst_pmac = self.arp_table[tenant_id][dst_ip]
+
+        # then check whether this is NAT ask for host
+        elif src_ip in self.NAT_ip_mac.keys():
+            # look for host mac directly
+            for t_id in self.arp_table.keys():
+                for (ip, mac) in self.arp_table[t_id].items():
+                    if ip == dst_ip:
+                        dst_pmac = mac
+
+        # it is one host requesting another host ip
         else:
-            return
+            # if there is record for this dst_ip, get dst_pmac from arp_table
+            if dst_ip in self.arp_table[tenant_id].keys():
+                dst_pmac = self.arp_table[tenant_id][dst_ip]
+            else:
+                return
 
         if not dst_pmac in self.pmac_to_vmac.keys():
             print('arp error:no such host recorded for ip:', dst_ip)

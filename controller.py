@@ -89,7 +89,9 @@ class Controller(app_manager.RyuApp):
         # record possible gateways for this controller {gateway_id -> {port_no -> 'datacenter_id' / subnet_number / 'NAT'}}
         # if datacenter_id  == 0, then the port is for Internet
         self.possible_gateways = {
-            10 : {1:1, 2:1, 3:2, 4:'2', 5:'NAT'},
+            # TODO TEST!!!!!!!!
+            #10 : {1:1, 2:1, 3:2, 4:'2', 5:'NAT'},
+            10 : {1:1, 2:'NAT'},
             11 : {1:2, 2:1, 3:'2', 4:'NAT'},
             12 : {1:2, 2:3, 3:'1'},
             13 : {1:3, 2:2, 3:'1'}
@@ -119,6 +121,10 @@ class Controller(app_manager.RyuApp):
             '00:00:00:00:00:06': 12,
             '00:00:00:00:00:07': 13,
             '00:00:00:00:00:08': 12
+        }
+        # record ip:mac for NAT
+        self.NAT_ip_mac = {
+            '191.0.0.3':'00:00:00:00:00:06'
         }
 
         # data in controller
@@ -154,7 +160,8 @@ class Controller(app_manager.RyuApp):
                                       gateway_arp_table=self.gateway_arp_table,
                                       dpid_to_vmac=self.dpid_to_vmac,
                                       topo_manager=self.topoManager,
-                                      mac_manager=self.mac_manager)
+                                      mac_manager=self.mac_manager,
+                                      NAT_ip_mac=self.NAT_ip_mac)
         self.port_listener = PortListener(datapathes=self.datapathes,
                                           sleep_time=self.PORT_INQUIRY_TIME,
                                           dpid_to_dpid=self.dpid_to_dpid,
@@ -265,6 +272,28 @@ class Controller(app_manager.RyuApp):
         parser = dp.ofproto_parser
         pkt = packet.Packet(msg.data)
 
+        # TODO test!!!!!!!!!!!!!!!!!!
+        if dpid == 10:
+            eth = pkt.get_protocols(ethernet.ethernet)[0]
+            dst = eth.dst
+            src = eth.src
+
+            print('eth_src=' + str(src) + ' ' + 'eth_dst=' + str(dst))
+
+            if src == '00:00:00:00:00:06' and dst == 'ff:ff:ff:ff:ff:ff':
+                i = iter(pkt)
+                eth_pkt = six.next(i)
+                special_pkt = six.next(i)
+
+                if type(special_pkt) == arp.arp:
+                    print('test pass')
+                    if special_pkt.opcode == arp.ARP_REQUEST:
+                        print('request')
+                    elif special_pkt.opcode == arp.ARP_REPLY:
+                        print('reply')
+                    print('ip_dst : ' + str(special_pkt.dst_ip))
+
+
         eth = pkt.get_protocols(ethernet.ethernet)[0]
         dst = eth.dst
         src = eth.src
@@ -286,6 +315,7 @@ class Controller(app_manager.RyuApp):
         elif type(special_pkt) == arp.arp:
             # test
             print('a arp packte is coming===============')
+            print('the src is ' + str(src))
             tenant_id = self.mac_manager.get_tenant_id_with_vmac(src)
             self.arp_manager.handle_arp(datapath=dp, in_port=in_port, pkt_ethernet=eth,
                                         pkt_arp=special_pkt, tenant_id=tenant_id,
@@ -315,10 +345,6 @@ class Controller(app_manager.RyuApp):
                 if self.mac_manager.get_datacenter_id_with_vmac(dst) == self.datacenter_id:
                     # test
                     print('pkt from ' + src + ' to ' + dst)
-
-                    # test
-                    if dst == self.gateway_vmac[10]:
-                        print('test pass')
 
                     # find the route
                     dst_dpid = self.mac_manager.get_dpid_with_vmac(dst)

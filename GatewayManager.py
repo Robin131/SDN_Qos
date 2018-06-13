@@ -53,7 +53,10 @@ class GatewayManager(object):
         # drop all pkts from outer port in table 0 if they cannot match any inner host
         for port in outer_ports:
             match = parser.OFPMatch(in_port=port)
-            actions = []
+            # TODO test!!!!!!!!!!!!!!!!!!!! (should be drop)
+            actions = [parser.OFPActionOutput(
+                ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER
+            )]
             instruction = [
                 parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
             ]
