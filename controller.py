@@ -90,9 +90,10 @@ class Controller(app_manager.RyuApp):
         # if datacenter_id  == 0, then the port is for Internet
         self.possible_gateways = {
             # TODO TEST!!!!!!!!
-            #10 : {1:1, 2:1, 3:2, 4:'2', 5:'NAT'},
-            10 : {1:1, 2:'NAT'},
-            11 : {1:2, 2:1, 3:'2', 4:'NAT'},
+            # 10 : {1:1, 2:1, 3:2, 4:'2', 5:'NAT'},
+            10 : {1:1, 2:1, 3:2, 4:'NAT'},
+            # 11 : {1:2, 2:1, 3:'2', 4:'NAT'},
+            11: {1: 2, 2: 1, 3:'NAT'},
             12 : {1:2, 2:3, 3:'1'},
             13 : {1:3, 2:2, 3:'1'}
         }
@@ -124,7 +125,14 @@ class Controller(app_manager.RyuApp):
         }
         # record ip:mac for NAT
         self.NAT_ip_mac = {
-            '191.0.0.3':'00:00:00:00:00:06'
+            '191.0.0.6':'00:00:00:00:00:06',
+            '191.0.0.7':'00:00:00:00:00:07'
+        }
+        # reord NAT for each gateway
+        # gateway_id -> NAT ip
+        self.gateway_NAT = {
+            10:'191.0.0.6',
+            11:'191.0.0.7'
         }
 
         # data in controller
@@ -197,7 +205,9 @@ class Controller(app_manager.RyuApp):
                                                topo_manager=self.topoManager,
                                                gateway_in_subnet=self.gateway_in_subnet,
                                                gateway_vmac=self.gateway_vmac,
-                                               datacenter_sunbet=self.datacenter_subnet)
+                                               datacenter_sunbet=self.datacenter_subnet,
+                                               NAT_ip_mac=self.NAT_ip_mac,
+                                               gateway_NAT=self.gateway_NAT)
 
 
 
@@ -271,28 +281,6 @@ class Controller(app_manager.RyuApp):
         ofproto = dp.ofproto
         parser = dp.ofproto_parser
         pkt = packet.Packet(msg.data)
-
-        # TODO test!!!!!!!!!!!!!!!!!!
-        if dpid == 10:
-            eth = pkt.get_protocols(ethernet.ethernet)[0]
-            dst = eth.dst
-            src = eth.src
-
-            print('eth_src=' + str(src) + ' ' + 'eth_dst=' + str(dst))
-
-            if src == '00:00:00:00:00:06' and dst == 'ff:ff:ff:ff:ff:ff':
-                i = iter(pkt)
-                eth_pkt = six.next(i)
-                special_pkt = six.next(i)
-
-                if type(special_pkt) == arp.arp:
-                    print('test pass')
-                    if special_pkt.opcode == arp.ARP_REQUEST:
-                        print('request')
-                    elif special_pkt.opcode == arp.ARP_REPLY:
-                        print('reply')
-                    print('ip_dst : ' + str(special_pkt.dst_ip))
-
 
         eth = pkt.get_protocols(ethernet.ethernet)[0]
         dst = eth.dst

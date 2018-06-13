@@ -14,7 +14,8 @@ from ryu.lib.packet import packet, ethernet, ipv4
 class GatewayManager(object):
     def __init__(self, datapathes, possibie_gatewats, arp_table_datacenter, gateways, gateway_arp_table, dpid_to_vmac,
                  flow_manager, subnet, mac_manager, datacenter_id, arp_table, pmac_to_vmac,
-                 topo_manager, gateway_in_subnet, gateway_vmac, datacenter_sunbet):
+                 topo_manager, gateway_in_subnet, gateway_vmac, datacenter_sunbet, NAT_ip_mac,
+                 gateway_NAT):
         super(GatewayManager, self)
 
         self.datapathes = datapathes
@@ -33,6 +34,8 @@ class GatewayManager(object):
         self.gateway_in_subnet = gateway_in_subnet
         self.gateway_vmac = gateway_vmac
         self.datacenter_sunbet = datacenter_sunbet
+        self.NAT_ip_mac = NAT_ip_mac
+        self.gateway_NAT = gateway_NAT
 
     def register_gateway(self, dpid):
 
@@ -54,6 +57,7 @@ class GatewayManager(object):
         for port in outer_ports:
             match = parser.OFPMatch(in_port=port)
             # TODO test!!!!!!!!!!!!!!!!!!!! (should be drop)
+            # TODO deal with arp
             actions = [parser.OFPActionOutput(
                 ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER
             )]
@@ -72,8 +76,9 @@ class GatewayManager(object):
             if type(dst) == type('1'):
                 if dst == 'NAT':
                     match = parser.OFPMatch()
+                    nat_mac = self.NAT_ip_mac[self.gateway_NAT[dpid]]
                     actions = [
-                        parser.OFPActionSetField(eth_dst='00:00:00:00:00:06'),
+                        parser.OFPActionSetField(eth_dst=nat_mac),
                         parser.OFPActionOutput(port_no),
                         # parser.OFPActionOutput(ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER)
                     ]

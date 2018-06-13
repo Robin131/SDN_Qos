@@ -1,15 +1,11 @@
-import re
 from mininet.cli import CLI
 from mininet.log import setLogLevel, info,error
 from mininet.net import Mininet
-from mininet.link import Intf
-from mininet.topolib import TreeTopo
-from mininet.util import quietRun
 from mininet.node import RemoteController, OVSSwitch
 
 if __name__ == "__main__":
     setLogLevel("info")
-    net = Mininet(switch=OVSSwitch, listenPort = 6633, ipBase='191.0.0.1/8')
+    net = Mininet(switch=OVSSwitch, listenPort = 6633, ipBase='191.0.0.1/4')
 
     mycontroller = RemoteController("RemoteController")
 

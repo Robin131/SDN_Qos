@@ -14,9 +14,9 @@ class MyTopo(Topo):
 
     def addTopo(self):
         # DB :
-        host8 = self.addHost('h8', ip="192.168.1.8")
-        host6 = self.addHost('h6', ip="192.168.1.6")
-        host7 = self.addHost('h7', ip="193.168.1.7")
+        host8 = self.addHost('h8', ip="192.168.1.8", mac='00:00:00:00:00:08')
+        host6 = self.addHost('h6', ip="192.168.1.6", mac='00:00:00:00:00:06')
+        host7 = self.addHost('h7', ip="193.168.1.7", mac='00:00:00:00:00:07')
 
         switch5 = self.addSwitch('s5', ip="193.168.2.1", datapath='user')
         switch6 = self.addSwitch('s6', ip="192.168.2.2", datapath='user')
