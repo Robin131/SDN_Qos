@@ -1,10 +1,11 @@
 from ryu.lib.packet import packet, ethernet
-import time
+from multiprocessing import Queue
+from ryu.lib import hub
 
 class HostManager(object):
     def __init__(self, arp_table, host_pmac, mac_manager, datacenter_id, pmac_to_vmac,
                  vmac_to_pmac, meter_manager, tenant_speed, flow_manager, host_gateway,
-                 datapathes, topo_manager):
+                 datapathes, topo_manager, host_queue):
         super(HostManager, self).__init__()
 
         self.arp_table = arp_table
@@ -19,11 +20,9 @@ class HostManager(object):
         self.host_gateway = host_gateway
         self.datapathes = datapathes
         self.topo_manager = topo_manager
+        self.host_queue = host_queue
 
     def register_host(self, ev):
-        # wait for ovs
-        time.sleep(2)
-
         msg = ev.msg
         dp = msg.datapath
         dpid = dp.id
@@ -57,9 +56,8 @@ class HostManager(object):
         self.flow_manager.transfer_dst_vmac_to_pmac(ev, src_vmac, src)
         self.flow_manager.install_receiving_flow_entry(dp, src, in_port)
 
-        # install flow entry for gateway
+        # directly put host info in queue
         gateway_id = self.host_gateway[src]
-        gateway = self.datapathes[gateway_id]
 
         # get ip for this host
         find = False
@@ -73,21 +71,62 @@ class HostManager(object):
             if find == True:
                 break
 
-        # ask out_port
-        host_dpid = self.mac_manager.get_dpid_with_vmac(src_vmac)
-        path = self.topo_manager.get_path(gateway_id, host_dpid)
-        out_port = path[0][1]
 
-        # install flow entry
-        match = parser.OFPMatch(eth_type=0x800, ipv4_dst=host_ip)
-        actions = [
-            parser.OFPActionSetField(eth_dst=src_vmac),
-            parser.OFPActionOutput(out_port)
-        ]
-        instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-        self.flow_manager.add_flow(datapath=gateway, priority=2,
-                 match=match, instructions=instructions, table_id=0, buffer_id=None)
+        if gateway_id in self.host_queue.keys():
+                self.host_queue[gateway_id].put(
+                    {
+                        'host_ip':host_ip,
+                        'host_vmac':src_vmac
+                    }
+                )
+        else:
+                self.host_queue[gateway_id] = Queue(maxsize=-1)
+                self.host_queue[gateway_id].put(
+                    {
+                        'host_ip': host_ip,
+                        'host_vmac': src_vmac
+                    }
+                )
+
 
 
     def get_tenant_id(self, vm_pmac):
         return self.host_pmac[vm_pmac]
+
+    def install_host_flow_entry_gateway(self):
+        hub.sleep(5)
+
+        # check whether host queue is empty, if not, install flow entry
+        for gateway_id in self.host_queue.keys():
+            if not self.host_queue[gateway_id].empty():
+                gateway = self.datapathes[gateway_id]
+                parser = gateway.ofproto_parser
+                ofproto = gateway.ofproto
+
+                while not self.host_queue[gateway_id].empty():
+                    record = self.host_queue[gateway_id].get()
+                    host_ip = record['host_ip']
+                    host_vmac = record['host_vmac']
+
+                    # ask out_port
+                    host_dpid = self.mac_manager.get_dpid_with_vmac(host_vmac)
+                    path = self.topo_manager.get_path(gateway_id, host_dpid)
+                    out_port = path[0][1]
+
+                    # install flow entry for gateway
+                    match = parser.OFPMatch(eth_type=0x800, ipv4_dst=host_ip)
+                    actions = [
+                        parser.OFPActionSetField(eth_dst=host_vmac),
+                        parser.OFPActionOutput(out_port)
+                    ]
+                    instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+
+                    # check if gateway has been registered
+                    self.flow_manager.add_flow(datapath=gateway, priority=2,
+                                               match=match, instructions=instructions, table_id=0, buffer_id=None)
+
+            else:
+                continue
+
+        print("finish to install queue flow")
+

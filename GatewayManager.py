@@ -15,7 +15,7 @@ class GatewayManager(object):
     def __init__(self, datapathes, possibie_gatewats, arp_table_datacenter, gateways, gateway_arp_table, dpid_to_vmac,
                  flow_manager, subnet, mac_manager, datacenter_id, arp_table, pmac_to_vmac,
                  topo_manager, gateway_in_subnet, gateway_vmac, datacenter_sunbet, NAT_ip_mac,
-                 gateway_NAT):
+                 gateway_NAT, host_queue):
         super(GatewayManager, self)
 
         self.datapathes = datapathes
@@ -36,6 +36,7 @@ class GatewayManager(object):
         self.datacenter_sunbet = datacenter_sunbet
         self.NAT_ip_mac = NAT_ip_mac
         self.gateway_NAT = gateway_NAT
+        self.host_queue = host_queue
 
     def register_gateway(self, dpid):
 
@@ -54,18 +55,16 @@ class GatewayManager(object):
                 outer_ports.append(port_no)
 
         # drop all pkts from outer port in table 0 if they cannot match any inner host
+        # NAT arp is handled later
         for port in outer_ports:
             match = parser.OFPMatch(in_port=port)
-            # TODO test!!!!!!!!!!!!!!!!!!!! (should be drop)
-            # TODO deal with arp
-            actions = [parser.OFPActionOutput(
-                ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER
-            )]
+            actions = []
             instruction = [
                 parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
             ]
             self.flow_manager.add_flow(datapath=gateway, priority=1, match=match, instructions=instruction,
                                        table_id=0, buffer_id=None)
+
 
         # add flow entry for each port
         # for other subnet port, add flow according to ip wildcard
@@ -75,6 +74,7 @@ class GatewayManager(object):
             # datacenter port or Internet port
             if type(dst) == type('1'):
                 if dst == 'NAT':
+                    # change the mac address to NAT mac for pkts to Internet
                     match = parser.OFPMatch()
                     nat_mac = self.NAT_ip_mac[self.gateway_NAT[dpid]]
                     actions = [
@@ -87,6 +87,18 @@ class GatewayManager(object):
                     ]
                     self.flow_manager.add_flow(datapath=gateway, priority=0, match=match, instructions=instruction,
                                   table_id=3, buffer_id=None)
+
+                    # install flow entry to send NAT arp pkts to controller in table 0
+                    match = parser.OFPMatch(eth_type=0x0806, in_port=port_no)
+                    actions = [parser.OFPActionOutput(
+                        ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER
+                    )]
+                    instruction = [
+                        parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
+                    ]
+                    self.flow_manager.add_flow(datapath=gateway, priority=2, match=match, instructions=instruction,
+                                               table_id=0, buffer_id=None)
+
 
                     continue
                 else:

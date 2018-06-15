@@ -2,6 +2,7 @@
 import six
 import networkx as nx
 import copy
+from multiprocessing import Queue
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -147,6 +148,7 @@ class Controller(app_manager.RyuApp):
         self.meters = {}                                    # {dpid -> {meter_id -> band_id}}
         self.gateways = {}                                  # {dpid -> {port_no -> datacenter_id}}
         self.gateway_vmac = {}                               # {dpid -> vmac}
+        self.host_queue = {}                                # gateway_id -> queue for host
 
         # components
         # self.utils = U.Utils()
@@ -187,7 +189,8 @@ class Controller(app_manager.RyuApp):
                                         flow_manager=self.flow_manager,
                                         host_gateway=self.host_gateway,
                                         datapathes=self.datapathes,
-                                        topo_manager=self.topoManager)
+                                        topo_manager=self.topoManager,
+                                        host_queue=self.host_queue)
 
 
         self.gateways_manager = GatewayManager(datapathes=self.datapathes,
@@ -207,13 +210,15 @@ class Controller(app_manager.RyuApp):
                                                gateway_vmac=self.gateway_vmac,
                                                datacenter_sunbet=self.datacenter_subnet,
                                                NAT_ip_mac=self.NAT_ip_mac,
-                                               gateway_NAT=self.gateway_NAT)
+                                               gateway_NAT=self.gateway_NAT,
+                                               host_queue=self.host_queue)
 
 
 
 
 
         # hub
+        self.install_host_flow_for_gateway_hub = hub.spawn(self.host_manager.install_host_flow_entry_gateway)
         # self.port_desc_info_hub = hub.spawn(self.port_listener.inquiry_all_port_desc_stats)
         # self.port_statistics_info_hub = hub.spawn(self.port_listener.inquiry_all_port_statistics_stats)
         # self.topo_detect_hub = hub.spawn(self.lldp_listener.lldp_loop)
