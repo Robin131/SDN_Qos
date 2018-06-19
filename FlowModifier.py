@@ -8,6 +8,8 @@ class FlowModifier(object):
         super(FlowModifier, self).__init__()
         self.datapathes = datapathes
 
+        self.change_route_priority = 5
+
     def add_flow(self, datapath, priority,
                  match, instructions, table_id=0, buffer_id=None):
         ofproto = datapath.ofproto
@@ -212,4 +214,71 @@ class FlowModifier(object):
         return res + six.int2byte(mask_end)
 
 
-        # TODO
+    # path: [(dpid, port_id), (dpid, port_id) .....]
+    def change_route_for_two_hosts(self, host1_vmac, host2_vmac, path):
+        if len(path) <=2:
+            return
+
+        path.reverse()
+
+        for i in range(1, len(path)):
+            front_index = i - 1
+            next_dpid = path[front_index][0]
+            this_port = path[i][1]
+            this_dpid = path[i][0]
+
+            this_datapath = self.datapathes[this_dpid]
+            ofproto = this_datapath.ofproto
+            parser = this_datapath.ofproto_parser
+
+            match = parser.OFPMatch()
+            match.append_field(header=ofp_13.OXM_OF_ETH_DST_W,
+                               mask=self._get_switch_id_mask(),
+                               value=self._get_switch_id_value(next_dpid)
+                               )
+            actions = [parser.OFPActionOutput(this_port)]
+            instruction = [parser.OFPInstructionActions(
+                ofproto.OFPIT_APPLY_ACTIONS, actions
+            )]
+
+            # TODO add idle_time
+            self.add_flow(datapath=this_datapath,
+                          priority=self.change_route_priority,
+                          match=match,
+                          instructions=instruction,
+                          table_id=2,
+                          buffer_id=None)
+
+            if i == len(path) - 1:
+                self.change_route_priority += 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

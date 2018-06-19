@@ -4,22 +4,22 @@ from Util import Util as U
 import time
 
 class PortListener(object):
-    def __init__(self, datapathes, sleep_time, dpid_to_dpid, port_speed, calculate_interval):
+    def __init__(self, datapathes, sleep_time, dpid_to_dpid, port_speed, calculate_interval,
+                 bandwidth_between_switch):
         super(PortListener, self).__init__()
         self.datapathes = datapathes
         self.sleep_time = sleep_time
         self.dpid_to_dpid = dpid_to_dpid
         self.port_speed = port_speed
         self.calculate_interval = calculate_interval
+        self.bandwidth_between_switch = bandwidth_between_switch
 
-        self.temp_port_speed = {}        # {dpid -> {port_id -> {'duration', 'rx_bytes', 'tx_byes'}}}
+        self.temp_port_speed = {}        # {dpid -> {remote_dpid -> {'duration', 'rx_bytes', 'tx_byes'}}}
         self.port_speed_init = False
 
     def _init_port_speed(self):
         for (dpid, port_id) in self.dpid_to_dpid.keys():
-            U.add3DimDict(self.port_speed, dpid, port_id, 'cur_speed', 0)
-            # TODO initiate max speed
-            U.add3DimDict(self.port_speed, dpid, port_id, 'max_speed', -1)
+            U.add3DimDict(self.port_speed, dpid, self.dpid_to_dpid[(dpid, port_id)], 'left_bandwidth', 0)
         self.port_speed_init = True
 
     def _send_port_desc_status_request(self, datapath):
@@ -74,7 +74,7 @@ class PortListener(object):
             # only calculate speed fpr ports that connect ovs
             if (dpid, port_id) in self.dpid_to_dpid.keys():
                 # test
-                # print(str(dpid) + ' ' + str(port_id) )
+                print(str(dpid) + ' ' + str(port_id) )
                 duration = stat.duration_sec
                 rx_bytes = stat.rx_bytes
                 tx_bytes = stat.tx_bytes
@@ -82,21 +82,27 @@ class PortListener(object):
                 # print('rx_bytes : ' + str(rx_bytes))
                 # print('tx_bytes : ' + str(tx_bytes))
 
+                # get the remote_dpid through (dpid, port_id)
+                remote_dpid = self.dpid_to_dpid[(dpid, port_id)]
+
 
                 # if there is no record for this port
                 if not dpid in self.temp_port_speed.keys() or \
-                    (dpid in self.temp_port_speed.keys() and not port_id in self.temp_port_speed[dpid].keys()):
-                    U.add3DimDict(self.temp_port_speed, dpid, port_id, 'duration', duration)
-                    U.add3DimDict(self.temp_port_speed, dpid, port_id, 'rx_bytes', rx_bytes)
-                    U.add3DimDict(self.temp_port_speed, dpid, port_id, 'tx_bytes', tx_bytes)
+                    (dpid in self.temp_port_speed.keys() and not remote_dpid in self.temp_port_speed[dpid].keys()):
+                    U.add3DimDict(self.temp_port_speed, dpid, remote_dpid, 'duration', duration)
+                    U.add3DimDict(self.temp_port_speed, dpid, remote_dpid, 'rx_bytes', rx_bytes)
+                    U.add3DimDict(self.temp_port_speed, dpid, remote_dpid, 'tx_bytes', tx_bytes)
                 else:
-                    interval = abs(self.temp_port_speed[dpid][port_id]['duration'] - duration)
-                    bytes = abs(self.temp_port_speed[dpid][port_id]['rx_bytes'] - rx_bytes) + \
-                            abs(self.temp_port_speed[dpid][port_id]['tx_bytes'] - tx_bytes)
+                    interval = abs(self.temp_port_speed[dpid][remote_dpid]['duration'] - duration)
+                    bytes = abs(self.temp_port_speed[dpid][remote_dpid]['rx_bytes'] - rx_bytes) + \
+                            abs(self.temp_port_speed[dpid][remote_dpid]['tx_bytes'] - tx_bytes)
                     speed = bytes / interval
                     # test
                     # print('speed : ' + str(speed))
-                    self.port_speed[dpid][port_id]['cur_speed'] = speed
+                    self.port_speed[dpid][remote_dpid]['left_bandwidth'] = \
+                        self.bandwidth_between_switch - speed
+                    print(self.port_speed[dpid][remote_dpid]['left_bandwidth'])
+
 
 
 

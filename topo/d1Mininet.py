@@ -2,8 +2,14 @@ from mininet.cli import CLI
 from mininet.log import setLogLevel, info,error
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSSwitch
+from mininet.link import TCLink
 
 if __name__ == "__main__":
+    default_hs_bw = 10
+    default_ss_bw = 10
+    default_gs_bw = 10
+    default_ng_bw = 10
+
     setLogLevel("info")
     net = Mininet(switch=OVSSwitch, listenPort = 6633, ipBase='191.0.0.1/4')
 
@@ -29,20 +35,20 @@ if __name__ == "__main__":
     gateway2 = net.addSwitch('g2', ip="192.1.1.1", dpid='B')
 
     # host - switch
-    net.addLink(host1, switch1, 1, 1)
-    net.addLink(host2, switch1, 1, 2)
-    net.addLink(host3, switch2, 1, 1)
-    net.addLink(host4, switch3, 1, 1)
-    net.addLink(host5, switch4, 1, 1)
+    net.addLink(host1, switch1, port1=1, port2=1, cls=TCLink, bw=default_hs_bw)
+    net.addLink(host2, switch1, 1, 2, cls=TCLink, bw=default_hs_bw)
+    net.addLink(host3, switch2, 1, 1, cls=TCLink, bw=default_hs_bw)
+    net.addLink(host4, switch3, 1, 1, cls=TCLink, bw=default_hs_bw)
+    net.addLink(host5, switch4, 1, 1, cls=TCLink, bw=default_hs_bw)
 
     # switch - switch
-    net.addLink(switch1, switch2, 3, 2)
-    net.addLink(switch2, switch4, 4, 2)
+    net.addLink(switch1, switch2, 3, 2, cls=TCLink, bw=default_ss_bw)
+    net.addLink(switch2, switch4, 4, 2, cls=TCLink, bw=default_ss_bw)
 
     # switch - gateway
-    net.addLink(switch1, gateway1, 4, 2)
-    net.addLink(switch2, gateway1, 3, 1)
-    net.addLink(switch3, gateway2, 2, 1)
+    net.addLink(switch1, gateway1, 4, 2, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch2, gateway1, 3, 1, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch3, gateway2, 2, 1, cls=TCLink, bw=default_gs_bw)
 
     # gateway - gateway
     net.addLink(gateway1, gateway2, 3, 2)

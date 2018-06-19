@@ -39,6 +39,9 @@ class Controller(app_manager.RyuApp):
     PORT_INQUIRY_TIME = 10      # default time interval for port inquiry
     PORT_SPEED_CAL_INTERVAL = 5     # default time interval to calculate port speed
 
+    # port_speed
+    DEFAULT_SS_BW = 10 * 1024 * 1024        # default bandwidth between switch
+
     def __init__(self, *args, **kwargs):
         super(Controller, self).__init__(*args, **kwargs)
 
@@ -144,7 +147,7 @@ class Controller(app_manager.RyuApp):
         self.dpid_to_ports = {}                             # {dpid -> ports}
         self.dpid_to_dpid = {}                              # {(dpid, port_id) -> dpid}
         self.switch_topo = nx.Graph()                       # switch topo
-        self.port_speed = {}                                # {dpid -> {port_id -> 'cur_speed', 'max_speed'}}
+        self.port_speed = {}                                # {dpid -> {remote_dpid -> 'max_speed' - 'cur_speed'}}
         self.meters = {}                                    # {dpid -> {meter_id -> band_id}}
         self.gateways = {}                                  # {dpid -> {port_no -> datacenter_id}}
         self.gateway_vmac = {}                               # {dpid -> vmac}
@@ -176,7 +179,8 @@ class Controller(app_manager.RyuApp):
                                           sleep_time=self.PORT_INQUIRY_TIME,
                                           dpid_to_dpid=self.dpid_to_dpid,
                                           port_speed=self.port_speed,
-                                          calculate_interval=self.PORT_SPEED_CAL_INTERVAL)
+                                          calculate_interval=self.PORT_SPEED_CAL_INTERVAL,
+                                          bandwidth_between_switch=self.DEFAULT_SS_BW)
         self.meter_manager = MeterModifier(meters=self.meters)
         self.host_manager = HostManager(arp_table=self.arp_table,
                                         host_pmac=self.host_pmac,
@@ -220,7 +224,7 @@ class Controller(app_manager.RyuApp):
         # hub
         self.install_host_flow_for_gateway_hub = hub.spawn(self.host_manager.install_host_flow_entry_gateway)
         # self.port_desc_info_hub = hub.spawn(self.port_listener.inquiry_all_port_desc_stats)
-        # self.port_statistics_info_hub = hub.spawn(self.port_listener.inquiry_all_port_statistics_stats)
+        self.port_statistics_info_hub = hub.spawn(self.port_listener.inquiry_all_port_statistics_stats)
         # self.topo_detect_hub = hub.spawn(self.lldp_listener.lldp_loop)
         # self.test_hub = hub.spawn(self.test)
 
