@@ -249,6 +249,7 @@ class FlowModifier(object):
                           table_id=2,
                           buffer_id=None)
 
+
             if i == len(path) - 1:
                 self.change_route_priority += 1
 
