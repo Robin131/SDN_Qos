@@ -4,9 +4,11 @@ import six
 import math
 
 class FlowModifier(object):
-    def __init__(self, datapathes):
+    def __init__(self, datapathes, all_datacenter_id, datacenter_id):
         super(FlowModifier, self).__init__()
         self.datapathes = datapathes
+        self.all_datacenter_id = all_datacenter_id
+        self.datacenter_id = datacenter_id
 
         self.change_route_priority = 5
 
@@ -148,21 +150,71 @@ class FlowModifier(object):
         self.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
                       table_id=table_id, buffer_id=buffer_id)
 
+    def intall_flow_entry_for_same_subnet_in_different_datacenter(self, ev):
+        dp = ev.datapath
+        dpid = dp.id
+        parser = dp.ofproto_parser
+        ofproto = dp.ofproto
+        
+        for id in self.all_datacenter_id:
+            if id != self.datacenter_id:
+                match = parser.OFPMatch()
+                match.append_field(
+                        header=ofp_13.OXM_OF_ETH_DST_W,
+                        mask=self._get_datacenter_id_mask(),
+                        value=self._get_datacenter_id_value(id)
+                )
+                actions = [
+                    parser.OFPActionOutput(ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER)
+                ]
+                instructions = [
+                    parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
+                ]
+                self.add_flow(datapath=dp, priority=3, match=match, instructions=instructions,
+                              table_id=2, buffer_id=None)
+        return
+
 
 
     def _get_switch_id_mask(self):
         return six.int2byte(0) * 3 + six.int2byte(255) * 2
 
+    def get_switch_id_mask(self):
+        return self._get_switch_id_mask()
+
     def _get_datacenter_id_mask(self):
         return six.int2byte(15 * 16)
+
+    def get_datacenter_id_mask(self):
+        return self._get_datacenter_id_mask()
 
     def _get_switch_id_value(self, dpid):
         return six.int2byte(0) * 3 + six.int2byte(int(math.floor(dpid / 256)))\
                + six.int2byte(int(math.floor(dpid % 256)))
 
+    def get_switch_id_value(self, dpid):
+        return self._get_switch_id_value(dpid)
+
     def _get_datacenter_id_value(self, datacenter_id):
         assert datacenter_id < 16
         return six.int2byte(datacenter_id * 16)
+
+    def get_datacenter_id_value(self, datacenter_id):
+        return self._get_datacenter_id_value(datacenter_id)
+
+    def _get_tenant_id_mask(self):
+        return six.int2byte(0) + six.int2byte(255) * 2
+
+    def get_tenant_id_mask(self):
+        return self._get_tenant_id_mask()
+
+    def _get_tenant_id_value(self, tenant_id):
+        assert tenant_id < 255 * 255
+        return six.int2byte(0) + six.int2byte(int(math.floor(tenant_id / 256)))\
+               + six.int2byte(int(math.floor(tenant_id % 256)))
+
+    def get_tenant_id_value(self, tenant_id):
+        return self._get_tenant_id_value(tenant_id)
 
     def _get_sunbet_ip_mask(self, subnet_ip):
         unit = int(subnet_ip.split('/')[1])
@@ -215,7 +267,7 @@ class FlowModifier(object):
 
 
     # path: [(dpid, port_id), (dpid, port_id) .....]
-    def change_route_for_two_hosts(self, host1_vmac, host2_vmac, path):
+    def change_route(self, path):
         if len(path) <=2:
             return
 

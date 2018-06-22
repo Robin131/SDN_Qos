@@ -102,16 +102,17 @@ class GatewayManager(object):
 
                     continue
                 else:
-                    datacenter_id = int(dst)
-                    for subnet in self.datacenter_sunbet[datacenter_id]:
-                        subnet_ip = self.subnet[subnet]
-                        match = parser.OFPMatch(eth_type=0x800, ipv4_dst=subnet_ip)
-                        actions = [parser.OFPActionOutput(port_no)]
-                        instruction = [
-                            parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
-                        ]
-                        self.flow_manager.add_flow(datapath=gateway, priority=1, match=match, instructions=instruction,
-                                                   table_id=2, buffer_id=None)
+                    # subnet in other datacenter
+                    subnet_in_other_datacenter_id = int(dst)
+                    subnet_ip = self.subnet[subnet_in_other_datacenter_id]
+                    match = parser.OFPMatch(eth_type=0x800, ipv4_dst=subnet_ip)
+                    actions = [parser.OFPActionOutput(port_no)]
+                    instruction = [
+                        parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
+                        parser.OFPInstructionGotoTable(table_id=3)
+                    ]
+                    self.flow_manager.add_flow(datapath=gateway, priority=2, match=match, instructions=instruction,
+                                               table_id=2, buffer_id=None)
             # different subnet port
             else:
                 # first check whether this subnet is the one this gateway is in

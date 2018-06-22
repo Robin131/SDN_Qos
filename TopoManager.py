@@ -29,14 +29,6 @@ class TopoManager(object):
 
         return -1
 
-    def get_nearest_gateway(self, src_dpid):
-        distance = {}
-        distance = nx.shortest_path_length(self.topo, source=src_dpid)
-        d_gateway = {}
-        for gateway_id in self.gateways.keys():
-            d_gateway[gateway_id] = distance[gateway_id]
-        return sorted(d_gateway.items(), key=lambda x: x[1])[0][0]
-
 
 
 

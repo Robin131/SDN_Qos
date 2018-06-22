@@ -1,6 +1,7 @@
 from ryu.lib.packet import packet, ethernet
 from multiprocessing import Queue
 from ryu.lib import hub
+from ryu.ofproto import ofproto_v1_3 as ofp_13
 
 class HostManager(object):
     def __init__(self, arp_table, host_pmac, mac_manager, datacenter_id, pmac_to_vmac,
@@ -114,14 +115,34 @@ class HostManager(object):
                     out_port = path[0][1]
 
                     # install flow entry for gateway
-                    match = parser.OFPMatch(eth_type=0x800, ipv4_dst=host_ip)
+                    # first install ip flow entry
+                    tenant_id = self.mac_manager.get_tenant_id_with_vmac(host_vmac)
+
+
+                    match = parser.OFPMatch(eth_src=('00:00:0'+str(tenant_id)+':00:00:00','00:ff:ff:00:00:00'),
+                                            eth_type=0x800,
+                                            ipv4_dst=host_ip
+                    )
+                    # match.append_field(
+                    #     header=ofp_13.OXM_OF_ETH_SRC_W,
+                    #     mask=self.flow_manager.get_tenant_id_mask(),
+                    #     value=self.flow_manager.get_tenant_id_value(tenant_id)
+                    # )
                     actions = [
                         parser.OFPActionSetField(eth_dst=host_vmac),
                         parser.OFPActionOutput(out_port)
                     ]
                     instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
 
-                    # check if gateway has been registered
+                    self.flow_manager.add_flow(datapath=gateway, priority=2,
+                                               match=match, instructions=instructions, table_id=0, buffer_id=None)
+
+                    # then install vmac flow entry
+                    match = parser.OFPMatch(eth_dst=host_vmac)
+                    actions = [
+                        parser.OFPActionOutput(out_port)
+                    ]
+                    instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
                     self.flow_manager.add_flow(datapath=gateway, priority=2,
                                                match=match, instructions=instructions, table_id=0, buffer_id=None)
 

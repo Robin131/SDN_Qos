@@ -19,7 +19,7 @@ class PortListener(object):
 
     def _init_port_speed(self):
         for (dpid, port_id) in self.dpid_to_dpid.keys():
-            U.add3DimDict(self.port_speed, dpid, self.dpid_to_dpid[(dpid, port_id)], 'left_bandwidth', 0)
+            U.add2DimDict(self.port_speed, dpid, self.dpid_to_dpid[(dpid, port_id)], self.bandwidth_between_switch)
         self.port_speed_init = True
 
     def _send_port_desc_status_request(self, datapath):
@@ -99,9 +99,8 @@ class PortListener(object):
                     speed = bytes / interval
                     # test
                     # print('speed : ' + str(speed))
-                    self.port_speed[dpid][remote_dpid]['left_bandwidth'] = \
-                        self.bandwidth_between_switch - speed
-                    print(self.port_speed[dpid][remote_dpid]['left_bandwidth'])
+                    self.port_speed[dpid][remote_dpid] = self.bandwidth_between_switch - speed
+                    print(self.port_speed[dpid][remote_dpid])
 
 
 

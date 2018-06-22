@@ -30,6 +30,7 @@ from PortListener import PortListener
 from HostManager import HostManager
 from MeterModifier import MeterModifier
 from GatewayManager import GatewayManager
+from RouteChanger import RouteChanger
 
 
 class Controller(app_manager.RyuApp):
@@ -40,7 +41,7 @@ class Controller(app_manager.RyuApp):
     PORT_SPEED_CAL_INTERVAL = 5     # default time interval to calculate port speed
 
     # port_speed
-    DEFAULT_SS_BW = 10 * 1024 * 1024        # default bandwidth between switch
+    DEFAULT_SS_BW = 300        # default bandwidth between switch
 
     def __init__(self, *args, **kwargs):
         super(Controller, self).__init__(*args, **kwargs)
@@ -48,41 +49,76 @@ class Controller(app_manager.RyuApp):
         # record for network configuration
 
         # arp table for different tenants
-        self.arp_table = {1:{'191.168.1.1':'00:00:00:00:00:01',                 # {tenant_id ->{ip -> mac}}
-                          '191.168.1.2':'00:00:00:00:00:02',
-                             '191.168.1.3':'00:00:00:00:00:03',
-                             '192.168.1.4':'00:00:00:00:00:04',
-                            '191.168.1.4':'00:00:00:00:00:05',
-                            '192.168.111.1':'10:00:00:00:00:00',
-                              '192.168.1.6':'00:00:00:00:00:06',
-                              '193.168.1.7':'00:00:00:00:00:07',
-                              '192.168.1.8': '00:00:00:00:00:08'}
+        self.arp_table = {              # {tenant_id ->{ip -> mac}}
+                        1:
+                            {
+                                '191.168.1.1':'00:00:00:00:00:01',
+                                '191.168.1.2':'00:00:00:00:00:02',
+                                '191.168.1.3':'00:00:00:00:00:03',
+                                '192.168.1.4':'00:00:00:00:00:04',
+                                '191.168.1.4':'00:00:00:00:00:05',
+                                '192.168.111.1':'10:00:00:00:00:00',
+                                '193.168.1.1':'00:00:00:00:04:00',
+                                '191.168.1.6':'00:00:00:00:00:09',
+                                '191.168.1.10':'00:00:00:00:01:00',
+                                '191.168.1.11':'00:00:00:00:02:00'
+                            },
+
+                        2:
+                            {
+                                '191.168.1.1':'00:00:00:00:00:0a',
+                                '191.168.1.2':'00:00:00:00:00:0b',
+                                '191.168.1.3':'00:00:00:00:00:0c',
+                                '191.168.1.10':'00:00:00:00:03:00',
+                                '191.168.1.11':'00:00:00:00:05:00'
+                            }
         }
         # arp table for different datacenter
+        # TODO for different tenant
         self.arp_table_datacenter = {                                               # {datacenter_id -> [ip]}
-            1 : ['191.168.1.1', '191.168.1.2', '191.168.1.3', '191.168.1.4', '192.168.1.4', '192.168.111.1'],
-            2 : ['192.168.1.6', '193.168.1.7', '192.168.1.8']
+            1 : ['191.168.1.1',
+                 '191.168.1.2',
+                 '191.168.1.3',
+                 '191.168.1.4',
+                 '192.168.1.4',
+                 '192.168.111.1',
+                 '191.168.1.6'],
+            2 : ['192.168.1.6',
+                 '193.168.1.7',
+                 '192.168.1.8']
         }
 
         self.gateway_arp_table = {                                                  # dpid -> ip
             10 : '191.1.1.1',
             11 : '192.1.1.1',
-            12 : '192.1.1.2',
+            12 : '191.1.1.2',
             13 : '193.1.1.1'
         }
-        self.host_pmac = {
-                        '00:00:00:00:00:01' : 1,                              # pmac -> tenant_id
-                          '00:00:00:00:00:02' : 1,
-                          '00:00:00:00:00:03' : 1,
-                          '00:00:00:00:00:04' : 1,
-                          '00:00:00:00:00:05' : 1,
-                          '10:00:00:00:00:00' : 1,
-                          '00:00:00:00:00:06' : 1,
-                         '00:00:00:00:00:07' : 1,
-                         '00:00:00:00:00:08' : 1
+        self.host_pmac = {                                                          # pmac -> tenant_id
+                        '00:00:00:00:00:01' : 1,
+                        '00:00:00:00:00:02' : 1,
+                        '00:00:00:00:00:03' : 1,
+                        '00:00:00:00:00:04' : 1,
+                        '00:00:00:00:00:05' : 1,
+                        '10:00:00:00:00:00' : 1,
+                        '00:00:00:00:04:00' : 1,
+                        '00:00:00:00:00:09' : 1,
+                        '00:00:00:00:01:00' : 1,
+                        '00:00:00:00:02:00' : 1,
+                        '00:00:00:00:00:0a' : 2,
+                        '00:00:00:00:00:0b' : 2,
+                        '00:00:00:00:00:0c' : 2,
+                        '00:00:00:00:03:00' : 2,
+                        '00:00:00:00:05:00' : 2
         }
-        self.tenant_level = {1 : 1}
-        self.tenant_speed = {1 : 1024 * 8}
+        self.tenant_level = {
+            1 : 1,
+            2 : 2
+        }
+        self.tenant_speed = {
+            1 : 1024 * 8,
+            2 : 1024
+        }
         self.datacenter_id = 1
         self.subnet = {                                                           # {subnet_id -> 'ip/mask'}
             1 : '191.0.0.0/8',
@@ -90,32 +126,31 @@ class Controller(app_manager.RyuApp):
             3 : '193.0.0.0/8'
         }
 
-        # record possible gateways for this controller {gateway_id -> {port_no -> 'datacenter_id' / subnet_number / 'NAT'}}
+        # record possible gateways for this controller
+        # {gateway_id -> {port_no -> 'subnet_number in other datacenter'/ subnet_number in this datacenter/ 'NAT'}}
         # if datacenter_id  == 0, then the port is for Internet
         self.possible_gateways = {
-            # TODO TEST!!!!!!!!
-            # 10 : {1:1, 2:1, 3:2, 4:'2', 5:'NAT'},
-            10 : {1:1, 2:1, 3:2, 4:'NAT'},
-            # 11 : {1:2, 2:1, 3:'2', 4:'NAT'},
-            11: {1: 2, 2: 1, 3:'NAT'},
-            12 : {1:2, 2:3, 3:'1'},
-            13 : {1:3, 2:2, 3:'1'}
+            10: {1:1, 2:1, 3:2, 4:'1', 5:'3'},
+            11: {1:2, 2:1, 3:'1', 4:'3'},
+            12: {1:1, 2:3, 3:'1', 4:'2'},
+            13: {1:3, 2:1, 3:'1', 4:'2'}
         }
         # record which subnet the gateway is in
         self.gateway_in_subnet = {
             10 : 1,
             11 : 2,
-            12 : 2,
+            12 : 1,
             13 : 3
         }
         # record subnet for every datacenter
         # datacenter_id -> [subnet_id]
         self.datacenter_subnet = {
             1 : [1, 2],
-            2 : [2, 3]
+            2 : [1, 3]
         }
         # record host in which gateway
         # src_pmac -> gateway_id
+        # TODO different tenant
         self.host_gateway = {
             '00:00:00:00:00:01': 10,
             '00:00:00:00:00:02': 10,
@@ -123,25 +158,47 @@ class Controller(app_manager.RyuApp):
             '00:00:00:00:00:04': 11,
             '00:00:00:00:00:05': 10,
             '10:00:00:00:00:00': 10,
-            '00:00:00:00:00:06': 12,
-            '00:00:00:00:00:07': 13,
-            '00:00:00:00:00:08': 12
+            '00:00:00:00:04:00': 13,
+            '00:00:00:00:00:09': 10,
+            '00:00:00:00:00:0a': 10,
+            '00:00:00:00:00:0b': 10,
+            '00:00:00:00:00:0c': 10,
+            '00:00:00:00:03:00': 12,
+            '00:00:00:00:05:00': 12,
+            '00:00:00:00:01:00': 12,
+            '00:00:00:00:02:00': 12
         }
         # record ip:mac for NAT
         self.NAT_ip_mac = {
             '191.0.0.6':'00:00:00:00:00:06',
             '191.0.0.7':'00:00:00:00:00:07'
         }
-        # reord NAT for each gateway
+        # record NAT for each gateway
         # gateway_id -> NAT ip
         self.gateway_NAT = {
             10:'191.0.0.6',
             11:'191.0.0.7'
         }
+        # record all datacenter_id
+        self.all_datacenter_id = [
+            1, 2
+        ]
 
         # data in controller
-        self.vmac_to_pmac = {}                              # {vmac -> pmac}
-        self.pmac_to_vmac = {}                              # {pmac -> vmac}
+        self.vmac_to_pmac = {                               # {vmac -> pmac}
+            '21:00:01:00:02:01': '00:00:00:00:02:00',
+            '22:00:02:00:01:04': '00:00:00:00:05:00',
+            '22:00:02:00:02:02': '00:00:00:00:03:00',
+            '21:00:01:00:03:01': '00:00:00:00:04:00',
+            '21:00:01:00:01:01': '00:00:00:00:01:00'
+        }
+        self.pmac_to_vmac = {                               # {pmac -> vmac}
+            '00:00:00:00:02:00': '21:00:01:00:02:01',
+            '00:00:00:00:05:00': '22:00:02:00:01:04',
+            '00:00:00:00:03:00': '22:00:02:00:02:02',
+            '00:00:00:00:04:00': '21:00:01:00:03:01',
+            '00:00:00:00:01:00': '21:00:01:00:01:01'
+        }
         self.dpid_to_vmac = {}                              # {dpid -> vmac}
         self.datapathes = {}                                # {dpid -> datapath}
         self.dpid_to_ports = {}                             # {dpid -> ports}
@@ -161,7 +218,9 @@ class Controller(app_manager.RyuApp):
                                           topo=self.switch_topo,
                                           DEFAULT_TTL=self.DEFAULT_TTL,
                                           port_speed=self.port_speed)
-        self.flow_manager = FlowModifier(datapathes=self.datapathes)
+        self.flow_manager = FlowModifier(datapathes=self.datapathes,
+                                         datacenter_id=self.datacenter_id,
+                                         all_datacenter_id=self.all_datacenter_id)
         self.mac_manager = MacManager(pmac_to_vmac=self.pmac_to_vmac,
                                       vmac_to_pmac=self.vmac_to_pmac,
                                       tenant_level=self.tenant_level)
@@ -182,6 +241,9 @@ class Controller(app_manager.RyuApp):
                                           calculate_interval=self.PORT_SPEED_CAL_INTERVAL,
                                           bandwidth_between_switch=self.DEFAULT_SS_BW)
         self.meter_manager = MeterModifier(meters=self.meters)
+        self.route_changer = RouteChanger(port_speed=self.port_speed,
+                                          flow_manager=self.flow_manager,
+                                          dpid_to_dpid=self.dpid_to_dpid)
         self.host_manager = HostManager(arp_table=self.arp_table,
                                         host_pmac=self.host_pmac,
                                         mac_manager=self.mac_manager,
@@ -224,9 +286,9 @@ class Controller(app_manager.RyuApp):
         # hub
         self.install_host_flow_for_gateway_hub = hub.spawn(self.host_manager.install_host_flow_entry_gateway)
         # self.port_desc_info_hub = hub.spawn(self.port_listener.inquiry_all_port_desc_stats)
-        self.port_statistics_info_hub = hub.spawn(self.port_listener.inquiry_all_port_statistics_stats)
+        # self.port_statistics_info_hub = hub.spawn(self.port_listener.inquiry_all_port_statistics_stats)
         # self.topo_detect_hub = hub.spawn(self.lldp_listener.lldp_loop)
-        # self.test_hub = hub.spawn(self.test)
+        # self.route_calculater_hub = hub.spawn(self.route_changer.change_route)
 
         # test
 
@@ -274,6 +336,8 @@ class Controller(app_manager.RyuApp):
                 self.flow_manager.install_missing_flow_for_gateway(ev)
             else:
                 self.flow_manager.install_missing_flow(ev)
+                # install flow for same subnet in different datacenter
+                self.flow_manager.intall_flow_entry_for_same_subnet_in_different_datacenter(ev)
 
             return
 
@@ -336,7 +400,6 @@ class Controller(app_manager.RyuApp):
         # if src is a vmac, which means this host has been registered
         elif src in self.vmac_to_pmac.keys():
             # first check whether dst is a host vmac or is a gateway vmac
-            # TODO if the host is in other datacenter
             if dst in self.vmac_to_pmac.keys() or dst in self.gateway_vmac.values():
                 # then check whether it is in this datacenter
                 if self.mac_manager.get_datacenter_id_with_vmac(dst) == self.datacenter_id:
@@ -368,13 +431,47 @@ class Controller(app_manager.RyuApp):
 
                 # if dst is not in this datacenter
                 else:
-                    src_dpid = self.mac_manager.get_dpid_with_vmac(src)
-                    nearest_gateway = self.topoManager.get_nearest_gateway(src_dpid)
-                    path = self.topoManager.get_path(src_dpid, nearest_gateway)
-                    # install flow entry for switches on path
-                    for connect in path:
-                        datapath = self.datapathes[connect[0]]
-                        port = connect[1]
+                    # send the pkt to the corresponding gateway
+                    # first get the gateway_id for src
+                    datacenter_id = self.mac_manager.get_datacenter_id_with_vmac(dst)
+                    tenant_id = self.mac_manager.get_tenant_id_with_vmac(src)
+                    src_ip = None
+                    for ip,mac in self.arp_table[tenant_id].items():
+                        if self.pmac_to_vmac[mac] == src:
+                            src_ip = ip
+                            break
+                    assert src_ip is not None
+                    gateway_id = self.host_gateway[self.vmac_to_pmac[src]]
+
+                    # then get path from dpid to gateway_id
+                    path = self.topoManager.get_path(dpid, gateway_id)
+                    for (switch, port) in path:
+                        match = parser.OFPMatch()
+                        match.append_field(
+                            header=ofproto_v1_3.OXM_OF_ETH_DST_W,
+                            mask=self.flow_manager.get_datacenter_id_mask(),
+                            value=self.flow_manager.get_datacenter_id_value(datacenter_id)
+                        )
+                        actions = [parser.OFPActionOutput(port)]
+                        instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+
+                        s = self.datapathes[switch]
+                        self.flow_manager.add_flow(datapath=s,
+                                                   priority=4,
+                                                   match=match,
+                                                   instructions=instructions,
+                                                   table_id=2,
+                                                   buffer_id=msg.buffer_id)
+
+                    s = self.datapathes[dpid]
+                    actions = [parser.OFPActionOutput(path[0][1])]
+                    data = None
+                    if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+                        data = msg.data
+                    out_packet = parser.OFPPacketOut(datapath=s, buffer_id=msg.buffer_id,
+                                                     in_port=in_port, actions=actions, data=data)
+                    s.send_msg(out_packet)
+                    return
 
             else:
                 # TODO what iare those 33:00.... mac ?

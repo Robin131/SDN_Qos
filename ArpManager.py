@@ -82,6 +82,8 @@ class ArpManager(object):
         dst_vmac = self.pmac_to_vmac[dst_pmac]
         # test
         # print('This packet is from ' + pkt_ethernet.src + ' and is to ' + dst_ip)
+        print('reply ' + str(pkt_arp.src_mac) + ', the mac for ' + pkt_arp.dst_ip +
+              ' is ' + str(dst_vmac))
 
         # fake a arp pkt and answer
         pkt = packet.Packet()
