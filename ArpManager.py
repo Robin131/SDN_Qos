@@ -3,7 +3,7 @@ from ryu.lib.packet import packet, ethernet
 
 class ArpManager(object):
     def __init__(self, arp_table, pmac_to_vmac, gateway_arp_table, dpid_to_vmac, topo_manager,
-                 mac_manager, NAT_ip_mac):
+                 mac_manager, NAT_ip_mac, gateway_ip_table):
         super(ArpManager, self).__init__()
 
         self.arp_table = arp_table
@@ -13,7 +13,9 @@ class ArpManager(object):
         self.topo_manager = topo_manager
         self.mac_manager = mac_manager
         self.NAT_ip_mac = NAT_ip_mac
+        self.gateway_ip_table = gateway_ip_table
 
+        self.gateway_robin_number = {}                          # gateway_ip -> round number
 
     def handle_arp(self, datapath, in_port, pkt_ethernet, pkt_arp, tenant_id, topoManager, whole_packet):
 
@@ -30,19 +32,19 @@ class ArpManager(object):
             return
 
         # first check whether it is requesting a gateway mac
-        if dst_ip in self.gateway_arp_table.values():
-            gateway_id = -1
-            for (key, value) in self.gateway_arp_table.items():
-                if value == dst_ip:
-                    gateway_id = key
-            gateway_vmac = self.dpid_to_vmac[gateway_id]
+        if dst_ip in self.gateway_ip_table.keys():
+            # check whether there is record for round robin
+            if dst_ip not in self.gateway_robin_number.keys():
+                self.gateway_robin_number[dst_ip] = 0
+            gateway_index = self.gateway_robin_number[dst_ip]
+            gateway_vmac = self.dpid_to_vmac[self.gateway_ip_table[dst_ip][gateway_index]]
             # test
             print('reply ' + str(pkt_arp.src_mac) + ', the mac for ' + pkt_arp.dst_ip +
                   ' is ' + str(gateway_vmac))
             # reply arp packet to src
             pkt = packet.Packet()
             pkt.add_protocol(ethernet.ethernet(ethertype=pkt_ethernet.ethertype,
-                                               dst=pkt_arp.src_mac, src=gateway_vmac))
+                                                dst=pkt_arp.src_mac, src=gateway_vmac))
             pkt.add_protocol(arp.arp(opcode=arp.ARP_REPLY,
                                      src_mac=gateway_vmac,
                                      src_ip=pkt_arp.dst_ip,
@@ -56,7 +58,38 @@ class ArpManager(object):
                 data=pkt
             )
             datapath.send_msg(out)
-            return
+
+            # update round number
+            gateway_number = len(self.gateway_ip_table[dst_ip])
+            self.gateway_robin_number[dst_ip] = (self.gateway_robin_number[dst_ip] + 1) %  gateway_number
+
+        # if dst_ip in self.gateway_arp_table.values():
+        #     gateway_id = -1
+        #     for (key, value) in self.gateway_arp_table.items():
+        #         if value == dst_ip:
+        #             gateway_id = key
+        #     gateway_vmac = self.dpid_to_vmac[gateway_id]
+        #     # test
+        #     print('reply ' + str(pkt_arp.src_mac) + ', the mac for ' + pkt_arp.dst_ip +
+        #           ' is ' + str(gateway_vmac))
+        #     # reply arp packet to src
+        #     pkt = packet.Packet()
+        #     pkt.add_protocol(ethernet.ethernet(ethertype=pkt_ethernet.ethertype,
+        #                                        dst=pkt_arp.src_mac, src=gateway_vmac))
+        #     pkt.add_protocol(arp.arp(opcode=arp.ARP_REPLY,
+        #                              src_mac=gateway_vmac,
+        #                              src_ip=pkt_arp.dst_ip,
+        #                              dst_mac=pkt_arp.src_mac,
+        #                              dst_ip=pkt_arp.src_ip))
+        #     pkt.serialize()
+        #     actions = [parser.OFPActionOutput(port=in_port)]
+        #     out = datapath.ofproto_parser.OFPPacketOut(
+        #         datapath=datapath, in_port=datapath.ofproto.OFPP_CONTROLLER,
+        #         buffer_id=datapath.ofproto.OFP_NO_BUFFER, actions=actions,
+        #         data=pkt
+        #     )
+        #     datapath.send_msg(out)
+        #     return
 
 
         # then check whether this is NAT ask for host

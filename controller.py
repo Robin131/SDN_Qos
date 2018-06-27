@@ -39,9 +39,12 @@ class Controller(app_manager.RyuApp):
     DEFAULT_TTL = 120           # default ttl for LLDP packet
     PORT_INQUIRY_TIME = 10      # default time interval for port inquiry
     PORT_SPEED_CAL_INTERVAL = 5     # default time interval to calculate port speed
+    GATEWAY_FLOW_INQUIRY_TIME = 10  # default time interval for gateway flow table inquiry
 
     # port_speed
     DEFAULT_SS_BW = 300        # default bandwidth between switch
+    DEFAULT_GG_BW = 1000       # default bandwidth between gateway in different datacenter
+
 
     def __init__(self, *args, **kwargs):
         super(Controller, self).__init__(*args, **kwargs)
@@ -92,7 +95,13 @@ class Controller(app_manager.RyuApp):
             10 : '191.1.1.1',
             11 : '192.1.1.1',
             12 : '191.1.1.2',
-            13 : '193.1.1.1'
+            13 : '193.1.1.1',
+            14 : '191.1.1.1',
+            15 : '192.1.1.1'
+        }
+        self.gateway_ip_table = {                                                   # ip -> [dpids]
+            '191.1.1.1': [10, 14],
+            '192.1.1.1': [11, 15]
         }
         self.host_pmac = {                                                          # pmac -> tenant_id
                         '00:00:00:00:00:01' : 1,
@@ -117,7 +126,7 @@ class Controller(app_manager.RyuApp):
         }
         self.tenant_speed = {
             1 : 1024 * 8,
-            2 : 1024
+            2 : 1024 * 8
         }
         self.datacenter_id = 1
         self.subnet = {                                                           # {subnet_id -> 'ip/mask'}
@@ -130,17 +139,21 @@ class Controller(app_manager.RyuApp):
         # {gateway_id -> {port_no -> 'subnet_number in other datacenter'/ subnet_number in this datacenter/ 'NAT'}}
         # if datacenter_id  == 0, then the port is for Internet
         self.possible_gateways = {
-            10: {1:1, 2:1, 3:2, 4:'1', 5:'3'},
-            11: {1:2, 2:1, 3:'1', 4:'3'},
-            12: {1:1, 2:3, 3:'1', 4:'2'},
-            13: {1:3, 2:1, 3:'1', 4:'2'}
+            10: {1:1, 2:1, 3:2, 4:-1, 5:'1'},
+            11: {1:2, 2:1, 3:-1, 4:'3'},
+            12: {1:1, 2:3, 3:-1, 4:'1'},
+            13: {1:3, 2:1, 3:'2', 4:'2'},
+            14: {1:-1, 2:1, 3:1, 4:2, 5:'1'},
+            15: {1:1, 2:-1, 3:2, 4:'3'}
         }
         # record which subnet the gateway is in
         self.gateway_in_subnet = {
             10 : 1,
             11 : 2,
             12 : 1,
-            13 : 3
+            13 : 3,
+            14 : 1,
+            15 : 1
         }
         # record subnet for every datacenter
         # datacenter_id -> [subnet_id]
@@ -152,17 +165,17 @@ class Controller(app_manager.RyuApp):
         # src_pmac -> gateway_id
         # TODO different tenant
         self.host_gateway = {
-            '00:00:00:00:00:01': 10,
-            '00:00:00:00:00:02': 10,
-            '00:00:00:00:00:03': 10,
-            '00:00:00:00:00:04': 11,
-            '00:00:00:00:00:05': 10,
-            '10:00:00:00:00:00': 10,
+            '00:00:00:00:00:01': [10, 14],
+            '00:00:00:00:00:02': [10, 14],
+            '00:00:00:00:00:03': [10, 14],
+            '00:00:00:00:00:04': [11, 15],
+            '00:00:00:00:00:05': [10, 14],
+            '10:00:00:00:00:00': [10, 14],
             '00:00:00:00:04:00': 13,
-            '00:00:00:00:00:09': 10,
-            '00:00:00:00:00:0a': 10,
-            '00:00:00:00:00:0b': 10,
-            '00:00:00:00:00:0c': 10,
+            '00:00:00:00:00:09': [10, 14],
+            '00:00:00:00:00:0a': [10, 14],
+            '00:00:00:00:00:0b': [10, 14],
+            '00:00:00:00:00:0c': [10, 14],
             '00:00:00:00:03:00': 12,
             '00:00:00:00:05:00': 12,
             '00:00:00:00:01:00': 12,
@@ -205,6 +218,7 @@ class Controller(app_manager.RyuApp):
         self.dpid_to_dpid = {}                              # {(dpid, port_id) -> dpid}
         self.switch_topo = nx.Graph()                       # switch topo
         self.port_speed = {}                                # {dpid -> {remote_dpid -> 'max_speed' - 'cur_speed'}}
+        self.gateway_port_speed = {}                        # {gateway_id -> {port_no -> speed}}
         self.meters = {}                                    # {dpid -> {meter_id -> band_id}}
         self.gateways = {}                                  # {dpid -> {port_no -> datacenter_id}}
         self.gateway_vmac = {}                               # {dpid -> vmac}
@@ -218,12 +232,13 @@ class Controller(app_manager.RyuApp):
                                           topo=self.switch_topo,
                                           DEFAULT_TTL=self.DEFAULT_TTL,
                                           port_speed=self.port_speed)
-        self.flow_manager = FlowModifier(datapathes=self.datapathes,
-                                         datacenter_id=self.datacenter_id,
-                                         all_datacenter_id=self.all_datacenter_id)
         self.mac_manager = MacManager(pmac_to_vmac=self.pmac_to_vmac,
                                       vmac_to_pmac=self.vmac_to_pmac,
                                       tenant_level=self.tenant_level)
+        self.flow_manager = FlowModifier(datapathes=self.datapathes,
+                                         datacenter_id=self.datacenter_id,
+                                         all_datacenter_id=self.all_datacenter_id,
+                                         mac_manager=self.mac_manager)
         self.topoManager = TopoManager(topo=self.switch_topo,
                                        dpid_to_dpid=self.dpid_to_dpid,
                                        gateways=self.gateways)
@@ -233,13 +248,15 @@ class Controller(app_manager.RyuApp):
                                       dpid_to_vmac=self.dpid_to_vmac,
                                       topo_manager=self.topoManager,
                                       mac_manager=self.mac_manager,
-                                      NAT_ip_mac=self.NAT_ip_mac)
+                                      NAT_ip_mac=self.NAT_ip_mac,
+                                      gateway_ip_table = self.gateway_ip_table)
         self.port_listener = PortListener(datapathes=self.datapathes,
                                           sleep_time=self.PORT_INQUIRY_TIME,
                                           dpid_to_dpid=self.dpid_to_dpid,
                                           port_speed=self.port_speed,
                                           calculate_interval=self.PORT_SPEED_CAL_INTERVAL,
-                                          bandwidth_between_switch=self.DEFAULT_SS_BW)
+                                          bandwidth_between_switch=self.DEFAULT_SS_BW,
+                                          possible_gateways=self.possible_gateways)
         self.meter_manager = MeterModifier(meters=self.meters)
         self.route_changer = RouteChanger(port_speed=self.port_speed,
                                           flow_manager=self.flow_manager,
@@ -277,7 +294,8 @@ class Controller(app_manager.RyuApp):
                                                datacenter_sunbet=self.datacenter_subnet,
                                                NAT_ip_mac=self.NAT_ip_mac,
                                                gateway_NAT=self.gateway_NAT,
-                                               host_queue=self.host_queue)
+                                               host_queue=self.host_queue,
+                                               gateway_flow_table_inquire_time=self.GATEWAY_FLOW_INQUIRY_TIME)
 
 
 
@@ -296,6 +314,7 @@ class Controller(app_manager.RyuApp):
 
     def _register(self, datapath):
         dpid = datapath.id
+        print(str(dpid) + '--------------------------------------------')
         self.datapathes[dpid] = datapath
 
         ports = copy.copy(datapath.ports)
@@ -334,6 +353,8 @@ class Controller(app_manager.RyuApp):
             if dpid in self.possible_gateways.keys():
                 self.gateways_manager.register_gateway(dpid)
                 self.flow_manager.install_missing_flow_for_gateway(ev)
+                # install statistic flow entry for gateway
+                self.flow_manager.install_statistic_flow_entry_for_gateway(dpid)
             else:
                 self.flow_manager.install_missing_flow(ev)
                 # install flow for same subnet in different datacenter
@@ -497,6 +518,13 @@ class Controller(app_manager.RyuApp):
         print('ports desc info reply==========================')
         self.port_listener.port_desc_stats_handler(ev)
 
+    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
+    def flow_stats_reply_handler(self, ev):
+        dp = ev.datapath
+        dpid = dp.id
+
+        if dpid in self.gateways.keys():
+            self.gateways_manager.handle_flow_stats_reply(ev)
 
 
 

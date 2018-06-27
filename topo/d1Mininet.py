@@ -41,6 +41,9 @@ if __name__ == "__main__":
     # gateway
     gateway1 = net.addSwitch('g1', ip="191.1.1.1", dpid='A')
     gateway2 = net.addSwitch('g2', ip="192.1.1.1", dpid='B')
+    gateway1_ = net.addSwitch('g1_', ip="191.1.1.1", dpid='E')
+    gateway2_ = net.addSwitch('g2_', ip="192.1.1.1", dpid='F')
+
 
     # host - switch
     # tenant 1
@@ -67,9 +70,17 @@ if __name__ == "__main__":
     net.addLink(switch1, gateway1, 4, 2, cls=TCLink, bw=default_gs_bw)
     net.addLink(switch2, gateway1, 3, 1, cls=TCLink, bw=default_gs_bw)
     net.addLink(switch3, gateway2, 2, 1, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch1, gateway1_, 8, 2, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch3, gateway2_, 3, 1, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch5, gateway1_, 4, 3, cls=TCLink, bw=default_gs_bw)
+
+
 
     # gateway - gateway
     net.addLink(gateway1, gateway2, 3, 2)
+    net.addLink(gateway1_, gateway1, 1, 4)
+    net.addLink(gateway1_, gateway2_, 4, 3)
+    net.addLink(gateway2, gateway2_, 3, 2)
 
     # # nat
     # net.addNAT(name = 'nat0',

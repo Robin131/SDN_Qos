@@ -72,15 +72,15 @@ class HostManager(object):
             if find == True:
                 break
 
-
-        if gateway_id in self.host_queue.keys():
+        for gateway_id in self.host_gateway[src]:
+            if gateway_id in self.host_queue.keys():
                 self.host_queue[gateway_id].put(
                     {
                         'host_ip':host_ip,
                         'host_vmac':src_vmac
                     }
                 )
-        else:
+            else:
                 self.host_queue[gateway_id] = Queue(maxsize=-1)
                 self.host_queue[gateway_id].put(
                     {
@@ -118,16 +118,11 @@ class HostManager(object):
                     # first install ip flow entry
                     tenant_id = self.mac_manager.get_tenant_id_with_vmac(host_vmac)
 
-
-                    match = parser.OFPMatch(eth_src=('00:00:0'+str(tenant_id)+':00:00:00','00:ff:ff:00:00:00'),
+                    match = parser.OFPMatch(eth_src=(self.mac_manager.get_simple_tenant_id_value(tenant_id),
+                                                     self.mac_manager.get_simple_tenant_id_mask()),
                                             eth_type=0x800,
                                             ipv4_dst=host_ip
                     )
-                    # match.append_field(
-                    #     header=ofp_13.OXM_OF_ETH_SRC_W,
-                    #     mask=self.flow_manager.get_tenant_id_mask(),
-                    #     value=self.flow_manager.get_tenant_id_value(tenant_id)
-                    # )
                     actions = [
                         parser.OFPActionSetField(eth_dst=host_vmac),
                         parser.OFPActionOutput(out_port)
@@ -135,7 +130,7 @@ class HostManager(object):
                     instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
 
                     self.flow_manager.add_flow(datapath=gateway, priority=2,
-                                               match=match, instructions=instructions, table_id=0, buffer_id=None)
+                                               match=match, instructions=instructions, table_id=2, buffer_id=None)
 
                     # then install vmac flow entry
                     match = parser.OFPMatch(eth_dst=host_vmac)
@@ -144,7 +139,7 @@ class HostManager(object):
                     ]
                     instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
                     self.flow_manager.add_flow(datapath=gateway, priority=2,
-                                               match=match, instructions=instructions, table_id=0, buffer_id=None)
+                                               match=match, instructions=instructions, table_id=2, buffer_id=None)
 
             else:
                 continue

@@ -7,6 +7,7 @@
 # 3456 tenant_id
 # 7890 switch_id
 # ab vm_id
+import six
 
 class MacManager(object):
     def __init__(self, pmac_to_vmac, vmac_to_pmac, tenant_level):
@@ -78,7 +79,7 @@ class MacManager(object):
         assert(switch_id < 256 * 256)
         hex_str = str(hex(switch_id))
         xPos = hex_str.find('x')
-        pure_hex_str = hex_str[xPos+1 : ]
+        pure_hex_str = hex_str[xPos+1 :]
         pure_hex_str = '0' * (4 -len(pure_hex_str)) + pure_hex_str
         pure_hex_str = pure_hex_str[0:2] + ':' + pure_hex_str[2:]
         return pure_hex_str
@@ -94,4 +95,34 @@ class MacManager(object):
         pure_hex_str = '0' * (2 - len(pure_hex_str)) + pure_hex_str
         return pure_hex_str
 
+    def get_simple_tenant_id_mask(self):
+        return '00:ff:ff:00:00:00'
+
+    # TODO
+    def get_simple_tenant_id_value(self, tenant_id):
+        return '00:00:0'+str(tenant_id)+':00:00:00'
+
+    def get_simple_tenant_level_mask(self):
+        return '0f:00:00:00:00:00'
+
+    def get_simple_tenant_level_value(self, tenant_level):
+        return '0' + str(tenant_level) + ':00:00:00:00:00'
+
+    def get_simple_switch_id_mask(self):
+        return '00:00:00:ff:ff:00'
+
+    def get_simple_stastic_switch_id_mask(self):
+        return '00:00:00:00:0f:00'
+
+    def get_simple_switch_id_value(self, switch_id):
+        switch_id_part = self._generate_switch_id_vmac(switch_id)
+        return '00:00:00:' + switch_id_part + ':00'
+
+    def get_simple_stastic_switch_id_datacenter_id_mask(self):
+        return 'f0:00:00:00:0f:00'
+
+    # TODO deal with datacenter id
+    def get_simple_switch_id_datacenter_id_value(self, switch_id, datacenter_id):
+        switch_id_part = self._generate_switch_id_vmac(switch_id)
+        return str(datacenter_id) + '0:00:00:' + switch_id_part + ':00'
 

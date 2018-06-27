@@ -5,7 +5,7 @@ import time
 
 class PortListener(object):
     def __init__(self, datapathes, sleep_time, dpid_to_dpid, port_speed, calculate_interval,
-                 bandwidth_between_switch):
+                 bandwidth_between_switch, gateway_port_speed, possible_gateways):
         super(PortListener, self).__init__()
         self.datapathes = datapathes
         self.sleep_time = sleep_time
@@ -13,8 +13,11 @@ class PortListener(object):
         self.port_speed = port_speed
         self.calculate_interval = calculate_interval
         self.bandwidth_between_switch = bandwidth_between_switch
+        self.gateway_port_speed = gateway_port_speed
+        self.possible_gateways = possible_gateways
 
-        self.temp_port_speed = {}        # {dpid -> {remote_dpid -> {'duration', 'rx_bytes', 'tx_byes'}}}
+        self.temp_port_speed = {}        # {dpid -> {remote_dpid -> {'duration', 'rx_bytes', 'tx_bytes'}}}
+        self.temp_gateway_port_speed = {}       # {dpid -> {port_id -> {'duration', 'rx_bytes', 'tx_bytes'}}}
         self.port_speed_init = False
 
     def _init_port_speed(self):
@@ -54,6 +57,7 @@ class PortListener(object):
             # print(self.port_speed)
             # print('ask all ports for statis info===============')
             self.temp_port_speed.clear()
+            self.temp_gateway_port_speed.clear()
             for dp in self.datapathes.values():
                 self._send_port_statistics_stats_request(dp)
             # print('first packet sending finish')
@@ -69,6 +73,7 @@ class PortListener(object):
         dp = msg.datapath
         dpid = dp.id
 
+        # first calculate speed for local connection
         for stat in ev.msg.body:
             port_id = stat.port_no
             # only calculate speed fpr ports that connect ovs
@@ -102,8 +107,27 @@ class PortListener(object):
                     self.port_speed[dpid][remote_dpid] = self.bandwidth_between_switch - speed
                     print(self.port_speed[dpid][remote_dpid])
 
+        # then calculate speed for every port on gateway
+        if dpid in self.possible_gateways.keys():
+            for stat in ev.msg.body:
+                port_id = stat.port_no
+                print(str(dpid) + ' ' + str(port_id))
+                duration = stat.duration_sec
+                rx_bytes = stat.rx_bytes
+                tx_bytes = stat.tx_bytes
 
-
+                if not dpid in self.temp_gateway_port_speed.keys() or \
+                        (dpid in self.temp_gateway_port_speed.keys()
+                         and not port_id in self.temp_gateway_port_speed[dpid].keys()):
+                    U.add3DimDict(self.temp_gateway_port_speed, dpid, port_id, 'duration', duration)
+                    U.add3DimDict(self.temp_gateway_port_speed, dpid, port_id, 'rx_bytes', rx_bytes)
+                    U.add3DimDict(self.temp_gateway_port_speed, dpid, port_id, 'tx_bytes', tx_bytes)
+                else:
+                    interval = abs(self.temp_gateway_port_speed[dpid][remote_dpid]['duration'] - duration)
+                    bytes = abs(self.temp_gateway_port_speed[dpid][remote_dpid]['rx_bytes'] - rx_bytes) + \
+                            abs(self.temp_gateway_port_speed[dpid][remote_dpid]['tx_bytes'] - tx_bytes)
+                    speed = bytes / interval
+                    self.gateway_port_speed[dpid][port_id] = speed
 
     def port_desc_stats_handler(self, ev):
         print(ev.msg.body)

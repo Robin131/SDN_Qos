@@ -4,11 +4,12 @@ import six
 import math
 
 class FlowModifier(object):
-    def __init__(self, datapathes, all_datacenter_id, datacenter_id):
+    def __init__(self, datapathes, all_datacenter_id, datacenter_id, mac_manager):
         super(FlowModifier, self).__init__()
         self.datapathes = datapathes
         self.all_datacenter_id = all_datacenter_id
         self.datacenter_id = datacenter_id
+        self.mac_manager = mac_manager
 
         self.change_route_priority = 5
 
@@ -70,9 +71,17 @@ class FlowModifier(object):
         instruction2 = [
             parser.OFPInstructionGotoTable(table_id=3)
         ]
+        instruction3 = [
+            parser.OFPInstructionGotoTable(table_id=4)
+        ]
+        instruction4 = [
+            parser.OFPInstructionGotoTable(table_id=5)
+        ]
         self.add_flow(dp, 0, match, instruction0)
         self.add_flow(dp, 0, match, instruction1, table_id=1)
         self.add_flow(dp, 0, match, instruction2, table_id=2)
+        self.add_flow(dp, 0, match, instruction3, table_id=3)
+        self.add_flow(dp, 0, match, instruction4, table_id=4)
 
 
     def transfer_src_pmac_to_vmac(self, ev, src, src_vmac, meter_id=None):
@@ -175,9 +184,84 @@ class FlowModifier(object):
         return
 
 
+    def install_statistic_flow_entry_for_gateway(self, dpid):
+        gateway = self.datapathes[dpid]
+        parser = gateway.ofproto_parser
+        ofproto = gateway.ofproto
+
+        # first install tenant_level statistic
+        for i in [1, 2, 3]:
+            # ip
+            match = parser.OFPMatch(eth_type=0x800,
+                                    eth_src=(self.mac_manager.get_simple_tenant_level_value(i),
+                                             self.mac_manager.get_simple_tenant_level_mask()))
+            instructions = [
+                parser.OFPInstructionGotoTable(1)
+            ]
+            self.add_flow(datapath=gateway, priority=1, match=match, instructions=instructions,
+                              table_id=0, buffer_id=None)
+
+            # same subnet in different datacenter
+            for id in self.all_datacenter_id:
+                if id != self.datacenter_id:
+                    match = parser.OFPMatch(eth_src=(self._get_tenant_level_datacenter_id_value(i, self.datacenter_id),
+                                                     self._get_tenant_level_datacenter_id_mask()),
+                                            eth_dst=(self._get_tenant_level_datacenter_id_value(i, id),
+                                                     self._get_tenant_level_datacenter_id_mask()))
+                    instructions = [
+                        parser.OFPInstructionGotoTable(1)
+                    ]
+                    self.add_flow(datapath=gateway, priority=1, match=match, instructions=instructions,
+                                 table_id=0, buffer_id=None)
+
+        # then install switch statistic
+        # 16
+        for i in range(1, 17):
+            # ip
+            match = parser.OFPMatch(eth_type=0x800,
+                                    eth_src=(self.mac_manager.get_simple_switch_id_value(i),
+                                             self.mac_manager.get_simple_stastic_switch_id_mask()))
+
+            instructions = [parser.OFPInstructionGotoTable(2)]
+            self.add_flow(datapath=gateway, priority=1, match=match, instructions=instructions,
+                          table_id=1, buffer_id=None)
+
+            # same subnet in different datacenter
+            for id in self.all_datacenter_id:
+                if id != self.datacenter_id:
+                    match = parser.OFPMatch(eth_src=(self.mac_manager.get_simple_switch_id_value(i),
+                                                     self.mac_manager.get_simple_stastic_switch_id_mask()),
+                                            eth_dst=(self.mac_manager.get_simple_switch_id_datacenter_id_value(i, id),
+                                                     self.mac_manager.get_simple_stastic_switch_id_datacenter_id_mask()))
+                    instructions = [
+                        parser.OFPInstructionGotoTable(1)
+                    ]
+                    self.add_flow(datapath=gateway, priority=1, match=match, instructions=instructions,
+                                  table_id=0, buffer_id=None)
+
+
+
+
+
+
+    def _get_tenant_level_datacenter_id_mask(self):
+        return 'ff:00:00:00:00:00'
+
+    def _get_tenant_level_datacenter_id_value(self, tenant_level, datacenter_id):
+        datacenter_id_hex = str(hex(datacenter_id))
+        xPos = datacenter_id_hex.find('x')
+        pure_hex_str = datacenter_id_hex[xPos + 1:]
+        return pure_hex_str + str(tenant_level) + ':00:00:00:00:00'
 
     def _get_switch_id_mask(self):
         return six.int2byte(0) * 3 + six.int2byte(255) * 2
+
+    def _get_statistic_switch_id_mask(self):
+        return six.int2byte(240) + six.int2byte(0) * 3 + six.int2byte(15)
+
+    def _get_statistic_switch_id_value(self, switch_id):
+        return six.int2byte(self.datacenter_id * 16) + six.int2byte(0) * 2 + six.int2byte(int(math.floor(switch_id / 256)))\
+               + six.int2byte(int(math.floor(switch_id % 256)))
 
     def get_switch_id_mask(self):
         return self._get_switch_id_mask()

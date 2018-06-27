@@ -1,11 +1,13 @@
 # flow table for gateway
-# 0 : local subnet
-# 1 : different subnet in this datacenter
-# 2 : other datacenter
-# 3 : NAT
+# 0 : tenant statistic data
+# 1 : switch statistic data
+# 2 : local subnet
+# 3 : different subnet in this datacenter
+# 4 : other datacenter
+# 5 : NAT
 #
 
-
+from ryu.lib import hub
 import six
 import IPy
 
@@ -15,7 +17,7 @@ class GatewayManager(object):
     def __init__(self, datapathes, possibie_gatewats, arp_table_datacenter, gateways, gateway_arp_table, dpid_to_vmac,
                  flow_manager, subnet, mac_manager, datacenter_id, arp_table, pmac_to_vmac,
                  topo_manager, gateway_in_subnet, gateway_vmac, datacenter_sunbet, NAT_ip_mac,
-                 gateway_NAT, host_queue):
+                 gateway_NAT, host_queue, gateway_bandwidth, gateway_flow_table_inquire_time):
         super(GatewayManager, self)
 
         self.datapathes = datapathes
@@ -37,12 +39,24 @@ class GatewayManager(object):
         self.NAT_ip_mac = NAT_ip_mac
         self.gateway_NAT = gateway_NAT
         self.host_queue = host_queue
+        self.gateway_bandwidth = gateway_bandwidth
+        self.gateway_flow_table_inquire_time = gateway_flow_table_inquire_time
+
+        # structure to record port
+        # divide port into group
+        self.port_group = {}                            # {(gateway_id, port_no) -> group_number}}
+        self.group_port = {}                            # {group_number -> [(gw, port), (gw, port)]}
+
 
     def register_gateway(self, dpid):
 
         # add gateway
         self.gateways[dpid] = self.possible_gateways[dpid]
         self.gateway_vmac[dpid] = self.dpid_to_vmac[dpid]
+
+        # organize port group
+
+
 
         gateway = self.datapathes[dpid]
         parser = gateway.ofproto_parser
@@ -51,7 +65,7 @@ class GatewayManager(object):
         # first find which port is the outer port(connect to own subnet)
         outer_ports = []
         for (port_no, dst) in self.gateways[dpid].items():
-            if dst != self.gateway_in_subnet[dpid]:
+            if dst != self.gateway_in_subnet[dpid] and dst != -1:
                 outer_ports.append(port_no)
 
         # drop all pkts from outer port in table 0 if they cannot match any inner host
@@ -63,7 +77,7 @@ class GatewayManager(object):
                 parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
             ]
             self.flow_manager.add_flow(datapath=gateway, priority=1, match=match, instructions=instruction,
-                                       table_id=0, buffer_id=None)
+                                       table_id=2, buffer_id=None)
 
 
         # add flow entry for each port
@@ -86,7 +100,7 @@ class GatewayManager(object):
                         parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
                     ]
                     self.flow_manager.add_flow(datapath=gateway, priority=0, match=match, instructions=instruction,
-                                  table_id=3, buffer_id=None)
+                                  table_id=5, buffer_id=None)
 
                     # install flow entry to send NAT arp pkts to controller in table 0
                     match = parser.OFPMatch(eth_type=0x0806, in_port=port_no)
@@ -97,7 +111,7 @@ class GatewayManager(object):
                         parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
                     ]
                     self.flow_manager.add_flow(datapath=gateway, priority=2, match=match, instructions=instruction,
-                                               table_id=0, buffer_id=None)
+                                               table_id=2, buffer_id=None)
 
 
                     continue
@@ -109,10 +123,17 @@ class GatewayManager(object):
                     actions = [parser.OFPActionOutput(port_no)]
                     instruction = [
                         parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
-                        parser.OFPInstructionGotoTable(table_id=3)
+                        parser.OFPInstructionGotoTable(table_id=5)
                     ]
                     self.flow_manager.add_flow(datapath=gateway, priority=2, match=match, instructions=instruction,
-                                               table_id=2, buffer_id=None)
+                                               table_id=4, buffer_id=None)
+            # pkt from same subnet (multi-gateway)
+            elif dst == -1:
+                match = parser.OFPMatch(in_port=port_no)
+                instruction = [parser.OFPInstructionGotoTable(3)]
+                self.flow_manager.add_flow(datapath=gateway, priority=2, match=match, instructions=instruction,
+                                           table_id=2, buffer_id=None)
+
             # different subnet port
             else:
                 # first check whether this subnet is the one this gateway is in
@@ -124,10 +145,34 @@ class GatewayManager(object):
                     actions = [parser.OFPActionOutput(port_no)]
                     instruction = [
                         parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
-                        parser.OFPInstructionGotoTable(table_id=2)
+                        parser.OFPInstructionGotoTable(table_id=4)
                     ]
                     self.flow_manager.add_flow(datapath=gateway, priority=2, match=match, instructions=instruction,
-                                table_id=1, buffer_id=None)
+                                table_id=3, buffer_id=None)
+
+    # a hub to do gateway load balance
+    # TODO
+    def adjust_gateway_transmission(self):
+        return
+
+
+    # a hub to inquire flow table info on gateway
+    def inquiry_gateway_flow_table_info(self):
+        while(True):
+            hub.sleep(self.gateway_flow_table_inquire_time)
+            table_ids = [0, 1]
+            for gw in self.gateways.values():
+                ofproto = gw.ofproto
+                parser = gw.ofproto_parser
+
+                for id in table_ids:
+                    req = parser.OFPFlowStatsRequest(datapath=gw, table_id=id)
+                    gw.send_msg(req)
+
+    # handle flow stats reply
+    # TODO
+    def handle_flow_stats_reply(self, ev):
+        return
 
 
     def get_internet_port(self, gateway_id):
@@ -181,140 +226,140 @@ class GatewayManager(object):
         return -1
 
 
-    def gateway_packet_in_handler(self, ev):
-        msg = ev.msg
-        dp = msg.datapath
-        dpid = dp.id
-        ofproto = dp.ofproto
-        parser = dp.ofproto_parser
-        in_port = msg.match['in_port']
-        pkt = packet.Packet(msg.data)
+    # def gateway_packet_in_handler(self, ev):
+    #     msg = ev.msg
+    #     dp = msg.datapath
+    #     dpid = dp.id
+    #     ofproto = dp.ofproto
+    #     parser = dp.ofproto_parser
+    #     in_port = msg.match['in_port']
+    #     pkt = packet.Packet(msg.data)
+    #
+    #     i = iter(pkt)
+    #     eth_pkt = six.next(i)
+    #     assert type(eth_pkt == ethernet.ethernet)
+    #
+    #     ipv4_pkt = six.next(i)
+    #     assert type(ipv4_pkt == ipv4.ipv4)
+    #
+    #     src_ip = ipv4_pkt.src
+    #     dst_ip = ipv4_pkt.dst
+    #
+    #     # test
+    #     print('packet in from gateway ' + str(dpid) + ', src=' + str(eth_pkt.src) + ', dst_ip=' + str(dst_ip))
+    #
+    #     dst_datacenter_id = self._get_datacenter_id_with_ip(dst_ip)
+    #
+    #     # dst is in this datacenter
+    #     # may 1.come from different subnet 2.Internet or other datacenters 3.come from this subnet to other subnet
+    #     # send with vmac instead of ip address
+    #     if dst_datacenter_id == self.datacenter_id:
+    #         # first check whether dst is in this subnet
+    #         this_subnet_id = self.gateway_in_subnet[dpid]
+    #         dst_subnet_id = self._get_subnet_with_ip(dst_ip)
+    #
+    #         # dst_ip is in this subnet, then the situation should be 1, 2
+    #         # send with mac
+    #         if dst_subnet_id == this_subnet_id:
+    #             pmac = self.arp_table[self.datacenter_id][dst_ip]
+    #             vmac = self.pmac_to_vmac[pmac]
+    #
+    #             # get shortest path to this host from this gateway
+    #             dst_dpid = self.mac_manager.get_dpid_with_vmac(vmac)
+    #             path = self.topo_manager.get_path(dpid, dst_dpid)
+    #
+    #             # install sending flow entry
+    #             out_port = path[0][1]
+    #             match = parser.OFPMatch(eth_type=0x800, ipv4_dst=dst_ip)
+    #             actions = [
+    #                 parser.OFPActionSetField(eth_dst=vmac),
+    #                 parser.OFPActionOutput(out_port)
+    #             ]
+    #             instruction = [
+    #                 parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
+    #             ]
+    #             self.flow_manager.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
+    #                                        table_id=1, buffer_id=msg.buffer_id)
+    #
+    #             # send the packet back
+    #             actions = [parser.OFPActionOutput(out_port)]
+    #             data = None
+    #             if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+    #                 data = msg.data
+    #             out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
+    #                                              in_port=in_port, actions=actions, data=data)
+    #             dp.send_msg(out_packet)
+    #             return
+    #
+    #         # dst_ip is in other subnet, then the situation should be 3
+    #         # send to certain port according to subnet_id
+    #         else:
+    #             # test
+    #             print('should not add such flow for gateway')
+    #             # # install flow entry
+    #             # # TODO use wildcard here to reduce flow entry
+    #             # out_port = self._get_out_port_with_ip(dst_ip, dpid)[0]
+    #             # match = parser.OFPMatch(eth_type=0x800, ipv4_dst=dst_ip)
+    #             # actions = [
+    #             #     parser.OFPActionOutput(out_port)
+    #             # ]
+    #             # instruction = [
+    #             #     parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
+    #             # ]
+    #             # self.flow_manager.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
+    #             #                            table_id=0, buffer_id=msg.buffer_id)
+    #             #
+    #             # # send the pkt back
+    #             # actions = [parser.OFPActionOutput(out_port)]
+    #             # data = None
+    #             # if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+    #             #     data = msg.data
+    #             # out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
+    #             #                                  in_port=in_port, actions=actions, data=data)
+    #             # dp.send_msg(out_packet)
+    #             # return
+    #
+    #
+    #     # dst is in other datacenters' record
+    #     # 1.same subnet but different datacenter  2.different subnet in different datacenter
+    #     elif dst_datacenter_id != -1:
+    #         out_port = self._get_datacenter_id_with_ip(dst_ip)
+    #         if out_port == -1:
+    #             print('gateway ' + str(dpid) + ' cannot connect to datacenter ' + str(dst_datacenter_id))
+    #             return
+    #         # install flow entry
+    #         # TODO use wildcard here to reduce flow entry
+    #         match = parser.OFPMatch(eth_type=0x800, ipv4_dst=dst_ip)
+    #         actions = [
+    #             parser.OFPActionOutput(out_port)
+    #         ]
+    #         instruction = [
+    #             parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
+    #         ]
+    #         self.flow_manager.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
+    #                                    table_id=1, buffer_id=msg.buffer_id)
+    #
+    #         # send pkt back
+    #         actions = [parser.OFPActionOutput(out_port)]
+    #         data = None
+    #         if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+    #             data = msg.data
+    #         out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
+    #                                          in_port=in_port, actions=actions, data=data)
+    #         dp.send_msg(out_packet)
+    #
+    #     # dst in not in any of the datacenters
+    #     # we consider this pkt should be sent to Internet (although it may not(wrong ip))
+    #     else:
+    #         out_port = self.get_internet_port(dpid)
+    #         # TODO how to reduce flow here ??
+    #         # TODO should dst_mac be changed to NAT mac?
+    #         # TODO NAT pmac or vmac ??
+    #
+    #     return
 
-        i = iter(pkt)
-        eth_pkt = six.next(i)
-        assert type(eth_pkt == ethernet.ethernet)
-
-        ipv4_pkt = six.next(i)
-        assert type(ipv4_pkt == ipv4.ipv4)
-
-        src_ip = ipv4_pkt.src
-        dst_ip = ipv4_pkt.dst
-
-        # test
-        print('packet in from gateway ' + str(dpid) + ', src=' + str(eth_pkt.src) + ', dst_ip=' + str(dst_ip))
-
-        dst_datacenter_id = self._get_datacenter_id_with_ip(dst_ip)
-
-        # dst is in this datacenter
-        # may 1.come from different subnet 2.Internet or other datacenters 3.come from this subnet to other subnet
-        # send with vmac instead of ip address
-        if dst_datacenter_id == self.datacenter_id:
-            # first check whether dst is in this subnet
-            this_subnet_id = self.gateway_in_subnet[dpid]
-            dst_subnet_id = self._get_subnet_with_ip(dst_ip)
-
-            # dst_ip is in this subnet, then the situation should be 1, 2
-            # send with mac
-            if dst_subnet_id == this_subnet_id:
-                pmac = self.arp_table[self.datacenter_id][dst_ip]
-                vmac = self.pmac_to_vmac[pmac]
-
-                # get shortest path to this host from this gateway
-                dst_dpid = self.mac_manager.get_dpid_with_vmac(vmac)
-                path = self.topo_manager.get_path(dpid, dst_dpid)
-
-                # install sending flow entry
-                out_port = path[0][1]
-                match = parser.OFPMatch(eth_type=0x800, ipv4_dst=dst_ip)
-                actions = [
-                    parser.OFPActionSetField(eth_dst=vmac),
-                    parser.OFPActionOutput(out_port)
-                ]
-                instruction = [
-                    parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
-                ]
-                self.flow_manager.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
-                                           table_id=0, buffer_id=msg.buffer_id)
-
-                # send the packet back
-                actions = [parser.OFPActionOutput(out_port)]
-                data = None
-                if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-                    data = msg.data
-                out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
-                                                 in_port=in_port, actions=actions, data=data)
-                dp.send_msg(out_packet)
-                return
-
-            # dst_ip is in other subnet, then the situation should be 3
-            # send to certain port according to subnet_id
-            else:
-                # test
-                print('should not add such flow for gateway')
-                # # install flow entry
-                # # TODO use wildcard here to reduce flow entry
-                # out_port = self._get_out_port_with_ip(dst_ip, dpid)[0]
-                # match = parser.OFPMatch(eth_type=0x800, ipv4_dst=dst_ip)
-                # actions = [
-                #     parser.OFPActionOutput(out_port)
-                # ]
-                # instruction = [
-                #     parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
-                # ]
-                # self.flow_manager.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
-                #                            table_id=0, buffer_id=msg.buffer_id)
-                #
-                # # send the pkt back
-                # actions = [parser.OFPActionOutput(out_port)]
-                # data = None
-                # if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-                #     data = msg.data
-                # out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
-                #                                  in_port=in_port, actions=actions, data=data)
-                # dp.send_msg(out_packet)
-                # return
-
-
-        # dst is in other datacenters' record
-        # 1.same subnet but different datacenter  2.different subnet in different datacenter
-        elif dst_datacenter_id != -1:
-            out_port = self._get_datacenter_id_with_ip(dst_ip)
-            if out_port == -1:
-                print('gateway ' + str(dpid) + ' cannot connect to datacenter ' + str(dst_datacenter_id))
-                return
-            # install flow entry
-            # TODO use wildcard here to reduce flow entry
-            match = parser.OFPMatch(eth_type=0x800, ipv4_dst=dst_ip)
-            actions = [
-                parser.OFPActionOutput(out_port)
-            ]
-            instruction = [
-                parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
-            ]
-            self.flow_manager.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
-                                       table_id=0, buffer_id=msg.buffer_id)
-
-            # send pkt back
-            actions = [parser.OFPActionOutput(out_port)]
-            data = None
-            if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-                data = msg.data
-            out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
-                                             in_port=in_port, actions=actions, data=data)
-            dp.send_msg(out_packet)
-
-        # dst in not in any of the datacenters
-        # we consider this pkt should be sent to Internet (although it may not(wrong ip))
-        else:
-            out_port = self.get_internet_port(dpid)
-            # TODO how to reduce flow here ??
-            # TODO should dst_mac be changed to NAT mac?
-            # TODO NAT pmac or vmac ??
-
-
-
-
-
+    # check all ports on gateway to balance the load
+    def gateway_balance_load_listener(self):
 
         return
 
