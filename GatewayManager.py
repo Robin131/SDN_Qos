@@ -156,7 +156,7 @@ class GatewayManager(object):
         return
 
 
-    
+
 
 
     # a hub to inquire flow table info on gateway
