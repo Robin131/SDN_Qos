@@ -154,6 +154,7 @@ class GatewayManager(object):
     # TODO
     def adjust_gateway_transmission(self):
         return
+    
 
 
     # a hub to inquire flow table info on gateway
