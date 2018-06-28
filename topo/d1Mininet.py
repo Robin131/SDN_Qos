@@ -34,20 +34,19 @@ if __name__ == "__main__":
     # switch
     switch1 = net.addSwitch('s1', ip="191.168.2.1", datapath='user')
     switch2 = net.addSwitch('s2', ip="191.168.2.2", datapath='user')
-    switch3 = net.addSwitch('s3', ip="192.168.2.1", datapath='user')
-    switch4 = net.addSwitch('s4', ip="191.168.2.3", datapath='user')
-    switch5 = net.addSwitch('s5', ip="191.168.2.4", datapath='user')
+    switch3 = net.addSwitch('s3', ip="191.168.2.3", datapath='user')
+    switch4 = net.addSwitch('s4', ip="191.168.2.4", datapath='user')
+    switch5 = net.addSwitch('s5', ip="191.168.2.5", datapath='user')
 
     # gateway
     gateway1 = net.addSwitch('g1', ip="191.1.1.1", dpid='A')
-    gateway2 = net.addSwitch('g2', ip="192.1.1.1", dpid='B')
-    gateway1_ = net.addSwitch('g1_', ip="191.1.1.1", dpid='E')
-    gateway2_ = net.addSwitch('g2_', ip="192.1.1.1", dpid='F')
+    gateway2 = net.addSwitch('g2', ip="191.1.1.1", dpid='B')
+    gateway3 = net.addSwitch('g3', ip="191.1.1.1", dpid='C')
 
 
     # host - switch
     # tenant 1
-    net.addLink(host1, switch1, port1=1, port2=1, cls=TCLink, bw=default_hs_bw)
+    net.addLink(host1, switch1, 1, 1, cls=TCLink, bw=default_hs_bw)
     net.addLink(host2, switch1, 1, 2, cls=TCLink, bw=default_hs_bw)
     net.addLink(host3, switch2, 1, 1, cls=TCLink, bw=default_hs_bw)
     net.addLink(host4, switch3, 1, 1, cls=TCLink, bw=default_hs_bw)
@@ -61,26 +60,37 @@ if __name__ == "__main__":
 
 
     # switch - switch
-    net.addLink(switch1, switch2, 3, 2, cls=TCLink, bw=default_ss_bw)
-    net.addLink(switch2, switch4, 4, 2, cls=TCLink, bw=default_ss_bw)
-    net.addLink(switch1, switch5, 5, 1, cls=TCLink, bw=default_ss_bw)
-    net.addLink(switch2, switch5, 5, 2, cls=TCLink, bw=default_ss_bw)
+    net.addLink(switch1, switch2, 5, 2, cls=TCLink, bw=default_ss_bw)
+    net.addLink(switch2, switch4, 3, 2, cls=TCLink, bw=default_ss_bw)
+    net.addLink(switch4, switch5, 5, 2, cls=TCLink, bw=default_ss_bw)
+    net.addLink(switch1, switch4, 4, 4, cls=TCLink, bw=default_ss_bw)
+    net.addLink(switch3, switch1, 2, 3, cls=TCLink, bw=default_ss_bw)
 
     # switch - gateway
-    net.addLink(switch1, gateway1, 4, 2, cls=TCLink, bw=default_gs_bw)
-    net.addLink(switch2, gateway1, 3, 1, cls=TCLink, bw=default_gs_bw)
-    net.addLink(switch3, gateway2, 2, 1, cls=TCLink, bw=default_gs_bw)
-    net.addLink(switch1, gateway1_, 8, 2, cls=TCLink, bw=default_gs_bw)
-    net.addLink(switch3, gateway2_, 3, 1, cls=TCLink, bw=default_gs_bw)
-    net.addLink(switch5, gateway1_, 4, 3, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch3, gateway1, 3, 1, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch3, gateway2, 4, 1, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch3, gateway3, 5, 1, cls=TCLink, bw=default_gs_bw)
 
+    net.addLink(switch1, gateway1, 8, 2, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch1, gateway2, 9, 2, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch1, gateway3, 10, 2, cls=TCLink, bw=default_gs_bw)
 
+    net.addLink(switch2, gateway1, 4, 3, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch2, gateway2, 5, 3, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch2, gateway3, 6, 3, cls=TCLink, bw=default_gs_bw)
+
+    net.addLink(switch4, gateway1, 6, 4, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch4, gateway2, 7, 4, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch4, gateway3, 8, 4, cls=TCLink, bw=default_gs_bw)
+
+    net.addLink(switch5, gateway1, 1, 5, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch5, gateway2, 4, 5, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch5, gateway3, 5, 5, cls=TCLink, bw=default_gs_bw)
 
     # gateway - gateway
-    net.addLink(gateway1, gateway2, 3, 2)
-    net.addLink(gateway1_, gateway1, 1, 4)
-    net.addLink(gateway1_, gateway2_, 4, 3)
-    net.addLink(gateway2, gateway2_, 3, 2)
+    net.addLink(gateway1, gateway2, 6, 6)
+    net.addLink(gateway2, gateway3, 7, 7)
+    net.addLink(gateway3, gateway1, 6, 7)
 
     # # nat
     # net.addNAT(name = 'nat0',
