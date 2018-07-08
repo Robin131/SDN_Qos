@@ -89,3 +89,15 @@ class MacManager(object):
     @staticmethod
     def get_vmac_mask_with_wildcard_on_dpid():
         return '00:00:00:ff:ff:00'
+
+    @staticmethod
+    def get_datacenter_id_value_with_datacenter_id(datacenter_id):
+        assert datacenter_id < 16
+        hex_str = str(hex(datacenter_id))
+        xPos = hex_str.find('x')
+        pure_hex_str = hex_str[xPos + 1:]
+        return pure_hex_str + '0:00:00:00:00:00'
+
+    @staticmethod
+    def get_datacenter_id_mask():
+        return 'f0:00:00:00:00:00'

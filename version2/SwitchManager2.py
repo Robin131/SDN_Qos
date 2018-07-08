@@ -4,14 +4,15 @@ from FlowManager2 import FlowManager
 
 
 # flow entry for switch
-# 0 : src_pmac -> src_vmac
-# 1 : dst_vmac -> dst_pmac
-# 2 : receiving flow entry (send pkt to host)
-# 3 : check whether dst_vmac is public or private (yes 4, no gw)
-# 4 : check whether dst_vmac is a gateway address (yes 6, no 5)
-# 5 : check whether dst_vmac is in local datacenter (yes 7, no gw)
+# 0 : src_pmac -> src_vmac                                              ok
+# 1 : dst_vmac -> dst_pmac                                              ok
+# 2 : receiving flow entry (send pkt to host)                           ok
+# 3 : check whether dst_vmac is public or private (yes 4, no 8)         ok
+# 4 : check whether dst_vmac is a gateway address (yes 6, no 5)         ok
+# 5 : check whether dst_vmac is in local datacenter (yes 7, no 8)       ok
 # 6 : replace dst_mac according to ip, send to gw
 # 7 : send in local datacenter
+# 8 : send to gateway according to host_vmac
 
 
 class SwitchManager(object):
@@ -21,7 +22,8 @@ class SwitchManager(object):
                  datacenter_id,
                  dpid_to_vmac,
                  lldp_manager,
-                 meters):
+                 meters,
+                 subnets):
         super(SwitchManager, self).__init__()
 
         self.datapathes = datapathes
@@ -30,6 +32,7 @@ class SwitchManager(object):
         self.dpid_to_vmac = dpid_to_vmac
         self.lldp_manager = lldp_manager
         self.meters = meters
+        self.subnets = subnets
 
     def register_switch(self, ev):
         datapath = ev.datapath
@@ -42,6 +45,9 @@ class SwitchManager(object):
         vmac = MacManager.get_vmac_new_switch(dpid=dpid, datacenter_id=self.datacenter_id)
         self.dpid_to_vmac[dpid] = vmac
         self.lldp_manager.lldp_detect(datapath)
+
+        FlowManager.install_subnet_flow(ev, self.subnets)       # table 3
+        FlowManager.install_adjust_datacenter_flow(ev, self.datacenter_id)
         FlowManager.install_missing_flow_for_switch(ev)
 
         self.meters[dpid] = {}

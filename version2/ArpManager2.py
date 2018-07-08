@@ -1,16 +1,32 @@
 from ryu.lib.packet import packet, ethernet, arp
-
+from multiprocessing import Queue
 import six
+
+from FlowManager2 import FlowManager
+from MacManager2 import MacManager
 
 
 class ArpManager(object):
     def __init__(self,
                  arp_table,
-                 pmac_to_vmac):
+                 pmac_to_vmac,
+                 gateway_ip,
+                 gateways,
+                 dpid_to_vmac,
+                 switch_gateway_connection,
+                 datapathes):
         super(ArpManager, self).__init__()
 
         self.arp_table = arp_table
         self.pmac_to_vmac = pmac_to_vmac
+        self.gateway_ip = gateway_ip
+        self.gateways = gateways
+        self.dpid_to_vmac = dpid_to_vmac
+        self.switch_gateway_connection = switch_gateway_connection
+        self.datapathes = datapathes
+
+
+        self.gateway_round_robin_queue = Queue(maxsize=-1)
 
     # create an arp pkt according to original pkt and dst_vmac
     def _create_arp_pkt(self, original_pkt, dst_vmac):
@@ -36,6 +52,9 @@ class ArpManager(object):
         i = iter(pkt)
         pkt_ethernet = six.next(i)
         assert type(pkt_ethernet) == ethernet.ethernet
+
+        src_vmac = pkt_ethernet.src
+
         pkt_arp = six.next(i)
         assert type(pkt_arp) == arp.arp
 
@@ -52,10 +71,37 @@ class ArpManager(object):
             print('Its a reply from ' + pkt_ethernet.src + ' and is to ' + dst_ip)
             return
 
-        # TODO arp for gateway
         # first check whether it is requesting a gateway mac
-        if False:
+        if dst_ip in self.gateway_ip:
+            # take the first gateway in queue
+            gateway_id = self.gateway_round_robin_queue.get()
+            gateway_vmac = self.dpid_to_vmac[gateway_id]
+
+            # fake a arp pkt and answer
+            pkt = self._create_arp_pkt(pkt, gateway_vmac)
+            actions = [parser.OFPActionOutput(port=in_port)]
+            out = datapath.ofproto_parser.OFPPacketOut(
+                datapath=datapath, in_port=datapath.ofproto.OFPP_CONTROLLER,
+                buffer_id=datapath.ofproto.OFP_NO_BUFFER, actions=actions,
+                data=pkt
+            )
+            datapath.send_msg(out)
+
+            #install flow entry for switch in table 8
+            src_dpid = MacManager.get_dpid_with_vmac(src_vmac)
+            dp = self.datapathes[src_dpid]
+            ofproto = dp.ofproto
+            parser = datapath.ofproto_parser
+
+            out_port = self.switch_gateway_connection[(src_dpid, gateway_id)][0]
+
+            match = parser.OFPMatch(eth_dst=src_vmac)
+            actions = [parser.OFPActionOutput(out_port)]
+            instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+
+            FlowManager.add_flow(dp, 1, match, instructions, table_id=8, buffer_id=None)
             return
+
         # TODO NAT ask for host
         elif False:
             return
@@ -87,3 +133,8 @@ class ArpManager(object):
         )
 
         datapath.send_msg(out)
+
+    def init_arp(self):
+        for gateway_id in self.gateways.keys():
+            self.gateway_round_robin_queue.put(gateway_id)
+        return

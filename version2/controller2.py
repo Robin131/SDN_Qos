@@ -20,6 +20,7 @@ from ArpManager2 import ArpManager
 from HostManager2 import HostManager
 from TopoManager2 import TopoManager
 from FlowManager2 import FlowManager
+from GatewayManager2 import GatewayManager
 
 
 class Controller(app_manager.RyuApp):
@@ -90,6 +91,26 @@ class Controller(app_manager.RyuApp):
             2: 2
         }
 
+        # record all potential subnet
+        self.subnets = [
+            '191.0.0.0/8',
+            '192.0.0.0/8',
+            '10.0.0.0/8'
+        ]
+
+        # record all potential gateway
+        self.potential_gateway = {
+            10 : {},
+            11 : {},
+            12 : {}
+        }
+
+        # record all potential gateway_ip
+        self.gateway_ip = [
+            '191.0.0.1',
+            '192.0.0.1'
+        ]
+
 
         # record for system
         # data in controller
@@ -106,8 +127,14 @@ class Controller(app_manager.RyuApp):
         self.gateways = {}                                  # {dpid -> {port_no -> datacenter_id}}
         self.gateway_vmac = {}                               # {dpid -> vmac}
         self.host_queue = {}                                # gateway_id -> queue for host
+        self.switch_gateway_connection = {}                 # (switch_id, gateway_id) -> (switch_port, gateway_port)
+        self.host_gateway = {}                              # {vmac -> gateway_id}
 
         # components
+        self.flow_manager = FlowManager(
+            datapathes=self.datapathes,
+            gateways=self.gateways
+        )
         self.lldp_manager = LLDPListener(
             datapathes=self.datapathes,
             dpid_potrs=self.dpid_to_ports,
@@ -122,11 +149,17 @@ class Controller(app_manager.RyuApp):
             datacenter_id=self.datacenter_id,
             dpid_to_vmac=self.dpid_to_vmac,
             lldp_manager=self.lldp_manager,
-            meters=self.meters
+            meters=self.meters,
+            subnets=self.subnets
         )
         self.arp_manager = ArpManager(
             arp_table=self.arp_table,
-            pmac_to_vmac=self.pmac_to_vmac
+            pmac_to_vmac=self.pmac_to_vmac,
+            gateway_ip=self.gateway_ip,
+            gateways=self.gateways,
+            dpid_to_vmac=self.dpid_to_vmac,
+            switch_gateway_connection=self.switch_gateway_connection,
+            datapathes=self.datapathes
         )
         self.mac_manager = MacManager(
             tenant_level=self.tenant_level
@@ -142,6 +175,14 @@ class Controller(app_manager.RyuApp):
             topo=self.switch_topo,
             dpid_to_dpid=self.dpid_to_dpid
         )
+        self.gateway_manager = GatewayManager(
+            gateways=self.gateways,
+            potential_gateway = self.potential_gateway
+        )
+
+        # hub
+        self.init_hub = hub.spawn(self.init_controller)
+
 
     @set_ev_cls(ofp_event.EventOFPStateChange, [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def switch_state_change_handler(self, ev):
@@ -157,7 +198,8 @@ class Controller(app_manager.RyuApp):
             self.lldp_manager.install_lldp_flow(ev)
             self.swtich_manager.register_switch(ev)
 
-            # TODO register gateway
+            if dpid in self.potential_gateway:
+                self.gateway_manager.register_gateway(ev)
 
         elif ev.state == DEAD_DISPATCHER:
             self.swtich_manager.unregister_switch(dp)
@@ -240,6 +282,37 @@ class Controller(app_manager.RyuApp):
                                                  in_port=in_port, actions=actions, data=data)
                 dp.send_msg(out_packet)
 
+    def init_controller(self):
+        hub.sleep(10)
+        # detect connections between switch and gateway
+        self._check_switch_gateway_connection()
+        # init arp manager for gateway round robin
+        self.arp_manager.init_arp()
+        # install flow entry for table 4 on ovs (to adjust whether dst is a gateway or not)
+        # del the missing flow in table 2 in every ovs and install new one (for register host)
+        for dpid in self.datapathes.keys():
+            if dpid in self.gateways.keys():
+                continue
+            else:
+                self.flow_manager.install_gateway_adjustment_flow_entry(dpid)
+                FlowManager.substitute_missing_flow(self.datapathes[dpid])
+
+
+
+    def _check_switch_gateway_connection(self):
+        for dpid in self.datapathes.keys():
+            if dpid in self.gateways.keys():
+                continue
+            else:
+                for gw_id in self.gateways.keys():
+                    # find the port connecting to gateway
+                    port1 = self.topo_manager.get_path(dpid, gw_id)[0][1]
+                    port2 = self.topo_manager.get_path(gw_id, dpid)[0][1]
+
+                    self.switch_gateway_connection[(dpid, gw_id)] = (port1, port2)
+        # test
+        print(self.switch_gateway_connection)
+        return
 
 
 
