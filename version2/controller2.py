@@ -17,6 +17,9 @@ from SwitchManager2 import SwitchManager
 from LLDPManager import LLDPListener
 from MacManager2 import MacManager
 from ArpManager2 import ArpManager
+from HostManager2 import HostManager
+from TopoManager2 import TopoManager
+from FlowManager2 import FlowManager
 
 
 class Controller(app_manager.RyuApp):
@@ -62,6 +65,31 @@ class Controller(app_manager.RyuApp):
                 }
         }
 
+        # pmac -> tenant_id
+        self.host_pmac = {
+            '00:00:00:00:00:01': 1,
+            '00:00:00:00:00:02': 1,
+            '00:00:00:00:00:03': 1,
+            '00:00:00:00:00:04': 1,
+            '00:00:00:00:00:05': 1,
+            '10:00:00:00:00:00': 1,
+            '00:00:00:00:04:00': 1,
+            '00:00:00:00:00:09': 1,
+            '00:00:00:00:01:00': 1,
+            '00:00:00:00:02:00': 1,
+            '00:00:00:00:00:0a': 2,
+            '00:00:00:00:00:0b': 2,
+            '00:00:00:00:00:0c': 2,
+            '00:00:00:00:03:00': 2,
+            '00:00:00:00:05:00': 2
+        }
+
+        # tenant_id -> tenant_level
+        self.tenant_level = {
+            1: 1,
+            2: 2
+        }
+
 
         # record for system
         # data in controller
@@ -100,6 +128,20 @@ class Controller(app_manager.RyuApp):
             arp_table=self.arp_table,
             pmac_to_vmac=self.pmac_to_vmac
         )
+        self.mac_manager = MacManager(
+            tenant_level=self.tenant_level
+        )
+        self.host_manager = HostManager(
+            host_pmac=self.host_pmac,
+            mac_manager=self.mac_manager,
+            datacenter_id=self.datacenter_id,
+            pmac_to_vmac=self.pmac_to_vmac,
+            vmac_to_pmac=self.vmac_to_pmac
+        )
+        self.topo_manager = TopoManager(
+            topo=self.switch_topo,
+            dpid_to_dpid=self.dpid_to_dpid
+        )
 
     @set_ev_cls(ofp_event.EventOFPStateChange, [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def switch_state_change_handler(self, ev):
@@ -113,7 +155,7 @@ class Controller(app_manager.RyuApp):
 
             # install lldp packet flow entry, missing flow entry
             self.lldp_manager.install_lldp_flow(ev)
-            self.swtich_manager.register_switch(dp)
+            self.swtich_manager.register_switch(ev)
 
             # TODO register gateway
 
@@ -156,8 +198,47 @@ class Controller(app_manager.RyuApp):
                 tenant_id=tenant_id,
                 pkt=pkt
             )
+            return
 
+        # check if the source has no record
+        if not src in self.pmac_to_vmac.keys() and not src in self.vmac_to_pmac.keys():
+            # first check whether this is pmac for host(not a vmac for host or switch, not a pmac for port that connect ovs)
+            if src in self.host_pmac.keys():
+                # test
+                print('new host coming!!==============' + src)
+                self.host_manager.register_host(ev)
 
+        # if src is a vmac, which means this host has been registered
+        elif src in self.vmac_to_pmac.keys():
+            # first check whether dst is a host vmac
+            if dst in self.vmac_to_pmac.keys():
+                print('pkt from ' + src + ' to ' + dst)
+
+                # find the route
+                dst_dpid = MacManager.get_dpid_with_vmac(dst)
+                path = self.topo_manager.get_path(dpid, dst_dpid)
+                # install flow entry for only this switch
+                datapath = self.datapathes[dpid]
+                port = path[0][1]
+                FlowManager.install_wildcard_sending_flow(
+                    dp=datapath,
+                    out_port=port,
+                    dst_dpid=dst_dpid,
+                    buffer_id=msg.buffer_id
+                )
+
+                # finally send the packet
+                if len(path) > 0:
+                    out_port = path[0][1]
+                    actions = [parser.OFPActionOutput(out_port)]
+                else:
+                    actions = []
+                data = None
+                if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+                    data = msg.data
+                out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
+                                                 in_port=in_port, actions=actions, data=data)
+                dp.send_msg(out_packet)
 
 
 

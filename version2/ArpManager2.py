@@ -18,7 +18,7 @@ class ArpManager(object):
         pkt_ethernet = six.next(i)
         assert type(pkt_ethernet) == ethernet.ethernet
         pkt_arp = six.next(i)
-        assert type(pkt_ethernet) == arp.arp
+        assert type(pkt_arp) == arp.arp
 
         pkt = packet.Packet()
         pkt.add_protocol(ethernet.ethernet(ethertype=pkt_ethernet.ethertype,
@@ -37,7 +37,7 @@ class ArpManager(object):
         pkt_ethernet = six.next(i)
         assert type(pkt_ethernet) == ethernet.ethernet
         pkt_arp = six.next(i)
-        assert type(pkt_ethernet) == arp.arp
+        assert type(pkt_arp) == arp.arp
 
         # test
         print(str(pkt_arp.src_mac) + ' ask mac for ' + pkt_arp.dst_ip)
