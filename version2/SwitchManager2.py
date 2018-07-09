@@ -7,12 +7,12 @@ from FlowManager2 import FlowManager
 # 0 : src_pmac -> src_vmac                                              ok
 # 1 : dst_vmac -> dst_pmac                                              ok
 # 2 : receiving flow entry (send pkt to host)                           ok
-# 3 : check whether dst_vmac is public or private (yes 4, no 8)         ok
+# 3 : check whether ip_dst is public or private (yes 4, no 8)(arp)      ok
 # 4 : check whether dst_vmac is a gateway address (yes 6, no 5)         ok
 # 5 : check whether dst_vmac is in local datacenter (yes 7, no 8)       ok
-# 6 : replace dst_mac according to ip, send to gw
-# 7 : send in local datacenter
-# 8 : send to gateway according to host_vmac
+# 6 : add dst_mac according to ip, send to 8                            ok
+# 7 : send in local datacenter                                          ok
+# 8 : send to gateway according to host_vmac                            ok
 
 
 class SwitchManager(object):
