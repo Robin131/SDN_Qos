@@ -8,9 +8,9 @@ from FlowManager2 import FlowManager
 # 1 : dst_vmac -> dst_pmac                                              ok
 # 2 : receiving flow entry (send pkt to host)                           ok
 # 3 : check whether ip_dst is public or private (yes 4, no 8)(arp)      ok
-# 4 : check whether dst_vmac is a gateway address (yes 6, no 5)         ok
-# 5 : check whether dst_vmac is in local datacenter (yes 7, no 8)       ok
-# 6 : add dst_mac according to ip, send to 8                            ok
+# 4 : check whether dst_vmac is a gateway address (yes 5, no 6)         ok
+# 5 : add dst_mac according to ip, send to 6                            ok
+# 6 : check whether dst_vmac is in local datacenter (yes 7, no 8)       ok
 # 7 : send in local datacenter                                          ok
 # 8 : send to gateway according to host_vmac                            ok
 
@@ -23,7 +23,8 @@ class SwitchManager(object):
                  dpid_to_vmac,
                  lldp_manager,
                  meters,
-                 subnets):
+                 subnets,
+                 potential_gateway):
         super(SwitchManager, self).__init__()
 
         self.datapathes = datapathes
@@ -33,6 +34,7 @@ class SwitchManager(object):
         self.lldp_manager = lldp_manager
         self.meters = meters
         self.subnets = subnets
+        self.potential_gateway = potential_gateway
 
     def register_switch(self, ev):
         datapath = ev.datapath
@@ -45,6 +47,9 @@ class SwitchManager(object):
         vmac = MacManager.get_vmac_new_switch(dpid=dpid, datacenter_id=self.datacenter_id)
         self.dpid_to_vmac[dpid] = vmac
         self.lldp_manager.lldp_detect(datapath)
+
+        if dpid in self.potential_gateway.keys():
+            return
 
         FlowManager.install_subnet_flow(ev, self.subnets)       # table 3
         FlowManager.install_adjust_datacenter_flow(ev, self.datacenter_id)
