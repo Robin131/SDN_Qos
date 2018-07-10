@@ -14,7 +14,9 @@ class ArpManager(object):
                  gateways,
                  dpid_to_vmac,
                  switch_gateway_connection,
-                 datapathes):
+                 datapathes,
+                 host_gateway,
+                 datacenter_id):
         super(ArpManager, self).__init__()
 
         self.arp_table = arp_table
@@ -24,7 +26,8 @@ class ArpManager(object):
         self.dpid_to_vmac = dpid_to_vmac
         self.switch_gateway_connection = switch_gateway_connection
         self.datapathes = datapathes
-
+        self.host_gateway = host_gateway
+        self.datacenter_id = datacenter_id
 
         self.gateway_round_robin_queue = Queue(maxsize=-1)
 
@@ -108,6 +111,8 @@ class ArpManager(object):
 
             # send the pkt
             datapath.send_msg(out)
+
+            self.host_gateway[src_vmac] = gateway_id
             return
 
         # TODO NAT ask for host
@@ -130,6 +135,33 @@ class ArpManager(object):
         # print('This packet is from ' + pkt_ethernet.src + ' and is to ' + dst_ip)
         print('reply ' + str(pkt_arp.src_mac) + ', the mac for ' + pkt_arp.dst_ip +
               ' is ' + str(dst_vmac))
+
+        # check whether this pkt is in other datacenters
+        # if it is, install flow entry to table 8 (send to gateway)
+        dst_datacenter_id = MacManager.get_datacenter_id_with_vmac(dst_vmac)
+        if dst_datacenter_id != self.datacenter_id:
+            if not src_vmac in self.host_gateway.keys():
+                # need to install gateway flow entry
+                gateway_id = self.gateway_round_robin_queue.get()
+                self.gateway_round_robin_queue.put(gateway_id)
+
+                # install flow entry
+                src_dpid = MacManager.get_dpid_with_vmac(src_vmac)
+                print(src_dpid)
+                print('++++++++++++++++++++++++++++++++++++++++++++++')
+                dp = self.datapathes[src_dpid]
+                ofproto = dp.ofproto
+                parser = datapath.ofproto_parser
+
+                out_port = self.switch_gateway_connection[(src_dpid, gateway_id)][0]
+
+                match = parser.OFPMatch(eth_src=src_vmac)
+                actions = [parser.OFPActionOutput(out_port)]
+                instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+
+                FlowManager.add_flow(dp, 1, match, instructions, table_id=8, buffer_id=None)
+                self.host_gateway[src_vmac] = gateway_id
+
 
         # fake a arp pkt and answer
         pkt = self._create_arp_pkt(pkt, dst_vmac)

@@ -264,7 +264,7 @@ class FlowManager(object):
         datacenter_id_value = MacManager.get_datacenter_id_value_with_datacenter_id(datacenter_id)
         datacenter_id_mask = MacManager.get_datacenter_id_mask()
 
-        match = parser.OFPMatch(eth_src=(datacenter_id_value, datacenter_id_mask))
+        match = parser.OFPMatch(eth_dst=(datacenter_id_value, datacenter_id_mask))
         instructions = [parser.OFPInstructionGotoTable(7)]
 
         FlowManager.add_flow(dp, 1, match, instructions, table_id=6, buffer_id=None)

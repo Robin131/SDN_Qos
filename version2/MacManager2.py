@@ -82,6 +82,11 @@ class MacManager(object):
         return int(dpid_hex, 16)
 
     @staticmethod
+    def get_datacenter_id_with_vmac(vmac):
+        datacenter_id_hex = vmac[0]
+        return int(datacenter_id_hex, 16)
+
+    @staticmethod
     def get_vmac_value_with_wildcard_on_dpid(dpid):
         switch_id_part = MacManager._generate_switch_id_vmac(dpid)
         return '00:00:00:' + switch_id_part + ':00'
