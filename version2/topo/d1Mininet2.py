@@ -39,9 +39,9 @@ if __name__ == "__main__":
     switch5 = net.addSwitch('s5', ip="191.168.2.5", datapath='user')
 
     # gateway
-    # gateway1 = net.addSwitch('g1', ip="191.1.1.1", dpid='A')
-    # gateway2 = net.addSwitch('g2', ip="191.1.1.1", dpid='B')
-    # gateway3 = net.addSwitch('g3', ip="191.1.1.1", dpid='C')
+    gateway1 = net.addSwitch('g1', ip="191.1.1.1", dpid='A')
+    gateway2 = net.addSwitch('g2', ip="191.1.1.1", dpid='B')
+    gateway3 = net.addSwitch('g3', ip="191.1.1.1", dpid='C')
 
 
     # host - switch
@@ -67,30 +67,30 @@ if __name__ == "__main__":
     net.addLink(switch3, switch1, 2, 3, cls=TCLink, bw=default_ss_bw)
 
     # switch - gateway
-    # net.addLink(switch3, gateway1, 3, 1, cls=TCLink, bw=default_gs_bw)
-    # net.addLink(switch3, gateway2, 4, 1, cls=TCLink, bw=default_gs_bw)
-    # net.addLink(switch3, gateway3, 5, 1, cls=TCLink, bw=default_gs_bw)
-    #
-    # net.addLink(switch1, gateway1, 8, 2, cls=TCLink, bw=default_gs_bw)
-    # net.addLink(switch1, gateway2, 9, 2, cls=TCLink, bw=default_gs_bw)
-    # net.addLink(switch1, gateway3, 10, 2, cls=TCLink, bw=default_gs_bw)
-    #
-    # net.addLink(switch2, gateway1, 4, 3, cls=TCLink, bw=default_gs_bw)
-    # net.addLink(switch2, gateway2, 5, 3, cls=TCLink, bw=default_gs_bw)
-    # net.addLink(switch2, gateway3, 6, 3, cls=TCLink, bw=default_gs_bw)
-    #
-    # net.addLink(switch4, gateway1, 6, 4, cls=TCLink, bw=default_gs_bw)
-    # net.addLink(switch4, gateway2, 7, 4, cls=TCLink, bw=default_gs_bw)
-    # net.addLink(switch4, gateway3, 8, 4, cls=TCLink, bw=default_gs_bw)
-    #
-    # net.addLink(switch5, gateway1, 1, 5, cls=TCLink, bw=default_gs_bw)
-    # net.addLink(switch5, gateway2, 4, 5, cls=TCLink, bw=default_gs_bw)
-    # net.addLink(switch5, gateway3, 5, 5, cls=TCLink, bw=default_gs_bw)
-    #
-    # # gateway - gateway
-    # net.addLink(gateway1, gateway2, 6, 6)
-    # net.addLink(gateway2, gateway3, 7, 7)
-    # net.addLink(gateway3, gateway1, 6, 7)
+    net.addLink(switch3, gateway1, 3, 1, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch3, gateway2, 4, 1, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch3, gateway3, 5, 1, cls=TCLink, bw=default_gs_bw)
+
+    net.addLink(switch1, gateway1, 8, 2, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch1, gateway2, 9, 2, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch1, gateway3, 10, 2, cls=TCLink, bw=default_gs_bw)
+
+    net.addLink(switch2, gateway1, 4, 3, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch2, gateway2, 5, 3, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch2, gateway3, 6, 3, cls=TCLink, bw=default_gs_bw)
+
+    net.addLink(switch4, gateway1, 6, 4, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch4, gateway2, 7, 4, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch4, gateway3, 8, 4, cls=TCLink, bw=default_gs_bw)
+
+    net.addLink(switch5, gateway1, 1, 5, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch5, gateway2, 4, 5, cls=TCLink, bw=default_gs_bw)
+    net.addLink(switch5, gateway3, 5, 5, cls=TCLink, bw=default_gs_bw)
+
+    # gateway - gateway
+    net.addLink(gateway1, gateway2, 6, 6)
+    net.addLink(gateway2, gateway3, 7, 7)
+    net.addLink(gateway3, gateway1, 6, 7)
 
     # # nat
     # net.addNAT(name = 'nat0',

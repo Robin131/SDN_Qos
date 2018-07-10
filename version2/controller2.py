@@ -30,7 +30,7 @@ class Controller(app_manager.RyuApp):
     PORT_INQUIRY_TIME = 10      # default time interval for port inquiry
     PORT_SPEED_CAL_INTERVAL = 5     # default time interval to calculate port speed
     GATEWAY_FLOW_INQUIRY_TIME = 10  # default time interval for gateway flow table inquiry
-    IP_REPLACE_MAC_TIMEOUT = 15     # default timeout for the table which modify mac_dst according to ip
+    IP_REPLACE_MAC_TIMEOUT = 50     # default timeout for the table which modify mac_dst according to ip
 
     # port_speed
     DEFAULT_SS_BW = 300        # default bandwidth between switch
@@ -144,7 +144,8 @@ class Controller(app_manager.RyuApp):
             dpid_to_dpid=self.dpid_to_dpid,
             topo=self.switch_topo,
             DEFAULT_TTL=self.DEFAULT_TTL,
-            port_speed=self.port_speed
+            port_speed=self.port_speed,
+            potential_gateways=self.potential_gateway
         )
         self.swtich_manager = SwitchManager(
             datapathes=self.datapathes,
@@ -153,7 +154,8 @@ class Controller(app_manager.RyuApp):
             dpid_to_vmac=self.dpid_to_vmac,
             lldp_manager=self.lldp_manager,
             meters=self.meters,
-            subnets=self.subnets
+            subnets=self.subnets,
+            potential_gateway=self.potential_gateway
         )
         self.arp_manager = ArpManager(
             arp_table=self.arp_table,
@@ -198,12 +200,13 @@ class Controller(app_manager.RyuApp):
             if dpid in self.datapathes.keys():
                 return
 
-            # install lldp packet flow entry, missing flow entry
+            # install lldp packet flow entry, register ovs
             self.lldp_manager.install_lldp_flow(ev)
             self.swtich_manager.register_switch(ev)
 
             if dpid in self.potential_gateway:
                 self.gateway_manager.register_gateway(ev)
+
 
         elif ev.state == DEAD_DISPATCHER:
             self.swtich_manager.unregister_switch(dp)
@@ -266,7 +269,7 @@ class Controller(app_manager.RyuApp):
                 # install flow entry for only this switch
                 datapath = self.datapathes[dpid]
                 port = path[0][1]
-                FlowManager.install_wildcard_sending_flow(
+                self.flow_manager.install_wildcard_sending_flow(
                     dp=datapath,
                     out_port=port,
                     dst_dpid=dst_dpid,
@@ -296,45 +299,60 @@ class Controller(app_manager.RyuApp):
                 dst_pmac = self.arp_table[tenant_id][ip_dst]
                 dst_vmac = self.pmac_to_vmac[dst_pmac]
 
-                match = parser.OFPMarch(eth_type=0x800, ipv4_dst=ip_dst)
+                match = parser.OFPMatch(eth_type=0x800, ipv4_dst=ip_dst)
                 actions = [parser.OFPActionSetField(eth_dst=dst_vmac)]
                 instructions = [
                     parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
-                    parser.OFPInstructionGotoTable(table_id=8)
+                    parser.OFPInstructionGotoTable(table_id=6)
                 ]
                 idle_timeout = self.IP_REPLACE_MAC_TIMEOUT
                 FlowManager.add_flow_with_timeout(dp, 1, match, instructions, idle_timeout=idle_timeout,
-                                                  table_id=6, buffer_id=msg.buffer_id)
+                                                  table_id=5, buffer_id=msg.buffer_id)
                 data = None
                 if msg.buffer_id == ofproto.OFP_NO_BUFFER:
                     data = msg.data
+
+                switch_id = MacManager.get_dpid_with_vmac(src)
+                dst_switch_id = MacManager.get_dpid_with_vmac(dst_vmac)
+                path = self.topo_manager.get_path(switch_id, dst_switch_id)
+                port = path[0][1]
+                actions = [parser.OFPActionSetField(eth_dst=dst_vmac),
+                           parser.OFPActionOutput(port)]
+
                 out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
-                                                 in_port=in_port, actions=[], data=data)
+                                                 in_port=in_port, actions=actions, data=data)
                 dp.send_msg(out_packet)
 
             # come from table 8, send to assigned gateway
-            elif dst == FlowManager.TABLE8_MISSING_FLOW_ADDRESS:
-                switch_id = MacManager.get_dpid_with_vmac(src)
-                gateway_id = self.host_gateway[src]
-
-                out_port = self.switch_gateway_connection[(switch_id, gateway_id)][0]
-
-                match = parser.OFPMarch(eth_src=src)
-                actions = [parser.OFPActionOutput(out_port)]
-                instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-
-                FlowManager.add_flow(dp, 1, match, instructions, table_id=8, buffer_id=msg.buffer_id)
-
-                data = None
-                if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-                    data = msg.data
-                out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
-                                                 in_port=in_port, actions=[], data=data)
-                dp.send_msg(out_packet)
+            # elif dst == FlowManager.TABLE8_MISSING_FLOW_ADDRESS:
+            #     switch_id = MacManager.get_dpid_with_vmac(src)
+            #     if src in self.host_gateway.keys():
+            #         gateway_id = self.host_gateway[src]
+            #     else:
+            #         return
+            #
+            #     out_port = self.switch_gateway_connection[(switch_id, gateway_id)][0]
+            #
+            #     match = parser.OFPMarch(eth_src=src)
+            #     actions = [parser.OFPActionOutput(out_port)]
+            #     instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+            #
+            #     FlowManager.add_flow(dp, 1, match, instructions, table_id=8, buffer_id=msg.buffer_id)
+            #
+            #     data = None
+            #     if msg.buffer_id == ofproto.OFP_NO_BUFFER:
+            #         data = msg.data
+            #     out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
+            #                                      in_port=in_port, actions=[], data=data)
+            #     dp.send_msg(out_packet)
 
 
     def init_controller(self):
         hub.sleep(6)
+
+        # test part
+        print('start to init')
+
         # detect connections between switch and gateway
         self._check_switch_gateway_connection()
         # init arp manager for gateway round robin
@@ -362,8 +380,6 @@ class Controller(app_manager.RyuApp):
                     port2 = self.topo_manager.get_path(gw_id, dpid)[0][1]
 
                     self.switch_gateway_connection[(dpid, gw_id)] = (port1, port2)
-        # test
-        print(self.switch_gateway_connection)
         return
 
 

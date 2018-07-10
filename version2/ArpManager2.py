@@ -76,8 +76,13 @@ class ArpManager(object):
             # take the first gateway in queue
             gateway_id = self.gateway_round_robin_queue.get()
             gateway_vmac = self.dpid_to_vmac[gateway_id]
+            self.gateway_round_robin_queue.put(gateway_id)
 
-            # fake a arp pkt and answer
+            # test
+            print(gateway_id)
+            print(gateway_vmac)
+
+            # fake a arp pkt and answer, wait to send
             pkt = self._create_arp_pkt(pkt, gateway_vmac)
             actions = [parser.OFPActionOutput(port=in_port)]
             out = datapath.ofproto_parser.OFPPacketOut(
@@ -85,7 +90,7 @@ class ArpManager(object):
                 buffer_id=datapath.ofproto.OFP_NO_BUFFER, actions=actions,
                 data=pkt
             )
-            datapath.send_msg(out)
+
 
             #install flow entry for switch in table 8
             src_dpid = MacManager.get_dpid_with_vmac(src_vmac)
@@ -95,11 +100,14 @@ class ArpManager(object):
 
             out_port = self.switch_gateway_connection[(src_dpid, gateway_id)][0]
 
-            match = parser.OFPMatch(eth_dst=src_vmac)
+            match = parser.OFPMatch(eth_src=src_vmac)
             actions = [parser.OFPActionOutput(out_port)]
             instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
 
             FlowManager.add_flow(dp, 1, match, instructions, table_id=8, buffer_id=None)
+
+            # send the pkt
+            datapath.send_msg(out)
             return
 
         # TODO NAT ask for host

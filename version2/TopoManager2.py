@@ -21,7 +21,7 @@ class TopoManager(object):
 
 
     def _get_path(self, dpid1, dpid2):
-        return nx.shortest_path(self.topo, dpid1, dpid2)
+        return nx.shortest_path(self.topo, dpid1, dpid2, weight='weight')
 
     def _get_connection_port_id(self, dpid1, dpid2):
         for key, value in self.dpid_to_dpid.items():

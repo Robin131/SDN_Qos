@@ -58,7 +58,14 @@ class LLDPPacket(object):
 
 
 class LLDPListener(object):
-    def __init__(self, datapathes, dpid_potrs, dpid_to_dpid, topo, DEFAULT_TTL, port_speed):
+    def __init__(self,
+                 datapathes,
+                 dpid_potrs,
+                 dpid_to_dpid,
+                 topo,
+                 DEFAULT_TTL,
+                 port_speed,
+                 potential_gateways):
         super(LLDPListener, self).__init__()
 
         self.DEFAULT_TTL = DEFAULT_TTL
@@ -67,6 +74,7 @@ class LLDPListener(object):
         self.dpid_to_dpid = dpid_to_dpid
         self.topo = topo
         self.port_speed = port_speed
+        self.potential_gateway = potential_gateways
 
 
     def _send_lldp_packet(self, dp):
@@ -137,7 +145,11 @@ class LLDPListener(object):
         self.dpid_to_dpid[(dpid, in_port)] = src_dpid
 
         # 向topo图中添加边
-        self.topo.add_edge(src_dpid, dpid)
+        if src_dpid in self.potential_gateway.keys() \
+            or dpid in self.potential_gateway.keys():
+            self.topo.add_edge(src_dpid, dpid, weight=500)
+        else:
+            self.topo.add_edge(src_dpid, dpid, weight=1)
 
         # print("test:check dpid_to_dpid", self.dpid_to_dpid)
         # print("nodes:", self.topo.nodes())
