@@ -312,6 +312,7 @@ class Controller(app_manager.RyuApp):
                 if msg.buffer_id == ofproto.OFP_NO_BUFFER:
                     data = msg.data
 
+
                 switch_id = MacManager.get_dpid_with_vmac(src)
                 dst_switch_id = MacManager.get_dpid_with_vmac(dst_vmac)
                 path = self.topo_manager.get_path(switch_id, dst_switch_id)
