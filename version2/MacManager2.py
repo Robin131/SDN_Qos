@@ -106,3 +106,16 @@ class MacManager(object):
     @staticmethod
     def get_datacenter_id_mask():
         return 'f0:00:00:00:00:00'
+
+    @staticmethod
+    def get_vmac_value_with_tenant_level(tenant_level):
+        assert tenant_level < 16
+        hex_str = str(hex(tenant_level))
+        xPos = hex_str.find('x')
+        pure_hex_str = hex_str[xPos + 1:]
+        return '0' + pure_hex_str + ':00:00:00:00:00'
+
+    @staticmethod
+    def get_tenant_level_mask():
+        return '0f:00:00:00:00:00'
+

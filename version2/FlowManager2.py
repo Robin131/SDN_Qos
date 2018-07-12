@@ -162,12 +162,17 @@ class FlowManager(object):
         )]
         instruction0 = [parser.OFPInstructionGotoTable(table_id=1)]
         instruction1 = [parser.OFPInstructionGotoTable(table_id=2)]
-        instruction3 = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-
+        instruction2 = [parser.OFPInstructionGotoTable(table_id=3)]
+        instruction3 = [parser.OFPInstructionGotoTable(4)]
+        instruction4 = [parser.OFPInstructionGotoTable(5)]
+        instruction6 = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
 
         FlowManager.add_flow(dp, 0, match, instruction0, table_id=0)
         FlowManager.add_flow(dp, 0, match, instruction1, table_id=1)
+        FlowManager.add_flow(dp, 0, match, instruction2, table_id=2)
         FlowManager.add_flow(dp, 0, match, instruction3, table_id=3)
+        FlowManager.add_flow(dp, 0, match, instruction4, table_id=4)
+        FlowManager.add_flow(dp, 0, match, instruction6, table_id=6)
 
         return
 
@@ -183,13 +188,13 @@ class FlowManager(object):
         )]
         instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
 
-        FlowManager.add_flow(dp, 2, match, instructions, table_id=0)
+        FlowManager.add_flow(dp, 2, match, instructions, table_id=3)
 
         # data pkt to local switch
         match = parser.OFPMatch(in_port=nat_port)
-        instructions = [parser.OFPInstructionGotoTable(3)]
+        instructions = [parser.OFPInstructionGotoTable(6)]
 
-        FlowManager.add_flow(dp, 1, match, instructions, table_id=0)
+        FlowManager.add_flow(dp, 1, match, instructions, table_id=3)
         return
 
     @staticmethod
@@ -204,9 +209,10 @@ class FlowManager(object):
         actions = [parser.OFPActionOutput(port)]
         instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
 
-        FlowManager.add_flow(dp, 1, match, instructions, table_id=2)
+        FlowManager.add_flow(dp, 1, match, instructions, table_id=5)
         return
 
+    # check whether pkt is to this datacenter in gateway
     @staticmethod
     def install_this_datacenter_flow(dp, datacenter_id):
         ofproto = dp.ofproto
@@ -216,9 +222,25 @@ class FlowManager(object):
         dst_mac_mask = MacManager.get_datacenter_id_mask()
 
         match = parser.OFPMatch(eth_dst=(dst_mac_value, dst_mac_mask))
-        instructions = [parser.OFPInstructionGotoTable(3)]
+        instructions = [parser.OFPInstructionGotoTable(6)]
 
-        FlowManager.add_flow(dp, 1, match, instructions, table_id=1)
+        FlowManager.add_flow(dp, 1, match, instructions, table_id=4)
+
+    # install statistics flow entry for gateway
+    @staticmethod
+    def install_statistics_flow(gw, dpids):
+        ofproto = gw.ofproto
+        parser = gw.ofproto_parser
+
+        for dpid in dpids:
+            switch_id = MacManager.get_vmac_value_with_wildcard_on_dpid(dpid)
+            mask = MacManager.get_vmac_mask_with_wildcard_on_dpid()
+
+            match = parser.OFPMatch(eth_src=(switch_id, mask))
+            instructions = [parser.OFPInstructionGotoTable(3)]
+
+            FlowManager.add_flow(gw, 1, match, instructions, table_id=2)
+        return
 
 
     # install flow entry to distinguish private subnet and Internet
@@ -249,10 +271,10 @@ class FlowManager(object):
             ofproto.OFPIT_APPLY_ACTIONS, actions
         )]
 
-        # if gateway then install in table_3
+        # if gateway then install in table_6
         if dpid in self.gateways.keys():
             FlowManager.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
-                                 table_id=3, buffer_id=buffer_id)
+                                 table_id=6, buffer_id=buffer_id)
         else:
             FlowManager.add_flow(datapath=dp, priority=1, match=match, instructions=instruction,
                                  table_id=table_id, buffer_id=buffer_id)
@@ -270,6 +292,22 @@ class FlowManager(object):
         instructions = [parser.OFPInstructionGotoTable(7)]
 
         FlowManager.add_flow(dp, 1, match, instructions, table_id=6, buffer_id=None)
+
+        return
+
+    # check priority in gateway
+    # only check priority 1
+    @staticmethod
+    def check_priority_on_gateway(gateway):
+        ofproto = gateway.ofproto
+        parser = gateway.ofproto_parser
+
+        level_value = MacManager.get_vmac_value_with_tenant_level(1)
+        mask = MacManager.get_tenant_level_mask()
+
+        match = parser.OFPMatch(eth_src=(level_value, mask))
+        instructions = [parser.OFPInstructionGotoTable(3)]
+        FlowManager.add_flow(gateway, 1, match, instructions, table_id=0)
 
         return
 

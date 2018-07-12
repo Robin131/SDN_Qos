@@ -22,3 +22,11 @@ class Util(object):
                 dict[key_a].update({key_b: val})
         else:
             dict.update({key_a: {key_b: val}})
+
+    @staticmethod
+    def difference_between_list(list_big, list_small):
+        res = []
+        for i in list_big:
+            if not i in list_small:
+                res.append(i)
+        return res

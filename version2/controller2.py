@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import six
 import networkx as nx
-import copy
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -22,7 +21,7 @@ from TopoManager2 import TopoManager
 from FlowManager2 import FlowManager
 from GatewayManager2 import GatewayManager
 from MeterManager2 import MeterModifier
-
+from Util2 import Util
 
 class Controller(app_manager.RyuApp):
 
@@ -31,7 +30,9 @@ class Controller(app_manager.RyuApp):
     PORT_INQUIRY_TIME = 10      # default time interval for port inquiry
     PORT_SPEED_CAL_INTERVAL = 5     # default time interval to calculate port speed
     GATEWAY_FLOW_INQUIRY_TIME = 10  # default time interval for gateway flow table inquiry
+    GATEWAY_PORT_INQUIRY_TIME = 10  # default time interval for gateway datacenter port inquiry
     IP_REPLACE_MAC_TIMEOUT = 50     # default timeout for the table which modify mac_dst according to ip
+
 
     # port_speed
     DEFAULT_SS_BW = 300        # default bandwidth between switch
@@ -214,13 +215,17 @@ class Controller(app_manager.RyuApp):
         self.gateway_manager = GatewayManager(
             gateways=self.gateways,
             potential_gateway = self.potential_gateway,
-            datacenter_id=self.datacenter_id
+            datacenter_id=self.datacenter_id,
+            gateway_flow_table_inquire_time=self.GATEWAY_FLOW_INQUIRY_TIME,
+            datapathes=self.datapathes,
+            gateway_port_inquire_time=self.GATEWAY_PORT_INQUIRY_TIME
         )
 
 
         # hub
         self.init_hub = hub.spawn(self.init_controller)
-
+        self.gateway_statistics_inquiry_hub = hub.spawn(self.gateway_manager.inquiry_gateway_flow_table_info)
+        self.gateways_datacenter_port_hub = hub.spawn(self.gateway_manager.inquiry_gateway_datacenter_port)
 
     @set_ev_cls(ofp_event.EventOFPStateChange, [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def switch_state_change_handler(self, ev):
@@ -363,28 +368,17 @@ class Controller(app_manager.RyuApp):
                                                  in_port=in_port, actions=actions, data=data)
                 dp.send_msg(out_packet)
 
-            # come from table 8, send to assigned gateway
-            # elif dst == FlowManager.TABLE8_MISSING_FLOW_ADDRESS:
-            #     switch_id = MacManager.get_dpid_with_vmac(src)
-            #     if src in self.host_gateway.keys():
-            #         gateway_id = self.host_gateway[src]
-            #     else:
-            #         return
-            #
-            #     out_port = self.switch_gateway_connection[(switch_id, gateway_id)][0]
-            #
-            #     match = parser.OFPMarch(eth_src=src)
-            #     actions = [parser.OFPActionOutput(out_port)]
-            #     instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
-            #
-            #     FlowManager.add_flow(dp, 1, match, instructions, table_id=8, buffer_id=msg.buffer_id)
-            #
-            #     data = None
-            #     if msg.buffer_id == ofproto.OFP_NO_BUFFER:
-            #         data = msg.data
-            #     out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
-            #                                      in_port=in_port, actions=[], data=data)
-            #     dp.send_msg(out_packet)
+    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
+    def flow_stats_reply_handler(self, ev):
+        msg = ev.msg
+        dp = msg.datapath
+        dpid = dp.id
+
+        if dpid in self.gateways.keys():
+            self.gateway_manager.gateway_statistics_handler(ev)
+
+        return
+
 
 
     def init_controller(self):
@@ -406,6 +400,12 @@ class Controller(app_manager.RyuApp):
                 self.flow_manager.install_gateway_adjustment_flow_entry(dpid)
                 FlowManager.substitute_missing_flow(self.datapathes[dpid])
                 FlowManager.install_arp_flow_entry(self.datapathes[dpid])
+        # install statistics flow entry on gateway
+        for gw_id in self.gateways.keys():
+            dpids = Util.difference_between_list(self.datapathes.keys(), self.gateways.keys())
+            FlowManager.install_statistics_flow(self.datapathes[gw_id], dpids)
+
+
 
 
 
