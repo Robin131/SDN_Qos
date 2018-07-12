@@ -40,7 +40,7 @@ class Controller(app_manager.RyuApp):
         super(Controller, self).__init__(*args, **kwargs)
 
         # configurations for the system
-        self.datacenter_id = 1
+        self.datacenter_id = 2
         # arp table for different tenants
         self.arp_table = {  # {tenant_id ->{ip -> mac}}
             1:
@@ -109,9 +109,8 @@ class Controller(app_manager.RyuApp):
         # 'NAT' : port_no
         # datacenter_id : port_no
         self.potential_gateway = {
-            10 : {'NAT':9, 2:8},
-            11 : {'NAT':9, 2:8},
-            12 : {'NAT':9, 2:8}
+            10 : {'NAT':5, 1:3},
+            11 : {'NAT':6, 1:3}
         }
 
         # record all potential gateway_ip
@@ -124,16 +123,26 @@ class Controller(app_manager.RyuApp):
         # record for system
         # data in controller
         self.vmac_to_pmac = {                               # {vmac -> vmac}
-            '22:00:02:00:02:02': '00:00:00:00:01:04',
-            '21:00:01:00:02:01': '00:00:00:00:01:02',
-            '22:00:02:00:01:02': '00:00:00:00:01:03',
-            '21:00:01:00:01:01': '00:00:00:00:01:01'
+            '11:00:01:00:01:02': '00:00:00:00:00:02',
+            '11:00:01:00:02:01': '00:00:00:00:00:03',
+            '12:00:02:00:04:03': '00:00:00:00:00:0c',
+            '11:00:01:00:03:01': '00:00:00:00:00:04',
+            '12:00:02:00:01:06': '00:00:00:00:00:0a',
+            '11:00:01:00:04:01': '00:00:00:00:00:05',
+            '11:00:01:00:05:03': '00:00:00:00:00:09',
+            '11:00:01:00:01:01': '00:00:00:00:00:01',
+            '12:00:02:00:01:07': '00:00:00:00:00:0b'
         }
         self.pmac_to_vmac = {                               # {pmac -> vmac}
-            '00:00:00:00:01:04': '22:00:02:00:02:02',
-            '00:00:00:00:01:02': '21:00:01:00:02:01',
-            '00:00:00:00:01:03': '22:00:02:00:01:02',
-            '00:00:00:00:01:01': '21:00:01:00:01:01'
+            '00:00:00:00:00:02': '11:00:01:00:01:02',
+            '00:00:00:00:00:03': '11:00:01:00:02:01',
+            '00:00:00:00:00:0c': '12:00:02:00:04:03',
+            '00:00:00:00:00:04': '11:00:01:00:03:01',
+            '00:00:00:00:00:0a': '12:00:02:00:01:06',
+            '00:00:00:00:00:05': '11:00:01:00:04:01',
+            '00:00:00:00:00:09': '11:00:01:00:05:03',
+            '00:00:00:00:00:01': '11:00:01:00:01:01',
+            '00:00:00:00:00:0b': '12:00:02:00:01:07'
         }
         self.dpid_to_vmac = {}                              # {dpid -> vmac}
         self.datapathes = {}                                # {dpid -> datapath}
@@ -337,13 +346,13 @@ class Controller(app_manager.RyuApp):
                     path = self.topo_manager.get_path(switch_id, dst_switch_id)
                     port = path[0][1]
                     actions = [parser.OFPActionSetField(eth_dst=dst_vmac),
-                            parser.OFPActionOutput(port)]
+                               parser.OFPActionOutput(port)]
                 else:
                     gateway_id = self.host_gateway[src]
                     switch_id = MacManager.get_dpid_with_vmac(src)
                     port = self.switch_gateway_connection[(switch_id, gateway_id)][0]
                     actions = [parser.OFPActionSetField(eth_dst=dst_vmac),
-                            parser.OFPActionOutput(port)]
+                               parser.OFPActionOutput(port)]
 
                 out_packet = parser.OFPPacketOut(datapath=dp, buffer_id=msg.buffer_id,
                                                  in_port=in_port, actions=actions, data=data)
