@@ -21,6 +21,7 @@ from HostManager2 import HostManager
 from TopoManager2 import TopoManager
 from FlowManager2 import FlowManager
 from GatewayManager2 import GatewayManager
+from MeterManager2 import MeterModifier
 
 
 class Controller(app_manager.RyuApp):
@@ -120,6 +121,13 @@ class Controller(app_manager.RyuApp):
             '192.0.0.1'
         ]
 
+        # record speed for tenant
+        # tenant_id -> speed
+        self.tenant_speed = {
+            1: 1024 * 8,
+            2: 1024 * 8
+        }
+
 
         # record for system
         # data in controller
@@ -144,7 +152,7 @@ class Controller(app_manager.RyuApp):
         self.gateway_port_speed = {}                        # {gateway_id -> {port_no -> speed}}
         self.meters = {}                                    # {dpid -> {meter_id -> band_id}}
         self.gateways = {}                                  # {dpid -> {port_no -> datacenter_id}}
-        self.gateway_vmac = {}                               # {dpid -> vmac}
+        self.gateway_vmac = {}                              # {dpid -> vmac}
         self.host_queue = {}                                # gateway_id -> queue for host
         self.switch_gateway_connection = {}                 # (switch_id, gateway_id) -> (switch_port, gateway_port)
         self.host_gateway = {}                              # {vmac -> gateway_id}
@@ -187,12 +195,17 @@ class Controller(app_manager.RyuApp):
         self.mac_manager = MacManager(
             tenant_level=self.tenant_level
         )
+        self.meter_manager = MeterModifier(
+            meters=self.meters
+        )
         self.host_manager = HostManager(
             host_pmac=self.host_pmac,
             mac_manager=self.mac_manager,
             datacenter_id=self.datacenter_id,
             pmac_to_vmac=self.pmac_to_vmac,
-            vmac_to_pmac=self.vmac_to_pmac
+            vmac_to_pmac=self.vmac_to_pmac,
+            tenant_speed=self.tenant_speed,
+            meter_manager=self.meter_manager
         )
         self.topo_manager = TopoManager(
             topo=self.switch_topo,
@@ -203,6 +216,7 @@ class Controller(app_manager.RyuApp):
             potential_gateway = self.potential_gateway,
             datacenter_id=self.datacenter_id
         )
+
 
         # hub
         self.init_hub = hub.spawn(self.init_controller)

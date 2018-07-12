@@ -11,7 +11,9 @@ class HostManager(object):
                  mac_manager,
                  datacenter_id,
                  pmac_to_vmac,
-                 vmac_to_pmac):
+                 vmac_to_pmac,
+                 tenant_speed,
+                 meter_manager):
         super(HostManager, self).__init__()
 
         self.host_pmac = host_pmac
@@ -19,6 +21,8 @@ class HostManager(object):
         self.datacenter_id = datacenter_id
         self.pmac_to_vmac = pmac_to_vmac
         self.vmac_to_pmac = vmac_to_pmac
+        self.tenant_speed = tenant_speed
+        self.meter_manager = meter_manager
 
     def register_host(self, ev):
         msg = ev.msg
@@ -41,11 +45,15 @@ class HostManager(object):
         self.vmac_to_pmac[src_vmac] = src
         print(self.vmac_to_pmac)
 
-        # TODO add meter feature
-        FlowManager.transfer_src_pmac_to_vmac(ev, src, src_vmac)
+        if tenant_id in self.tenant_speed.keys():
+            # test
+            print('add meter')
+            meter_id = self.meter_manager.add_meter(datapath=dp, speed=self.tenant_speed[tenant_id])
+            print('meter id is ' + str(meter_id))
+            FlowManager.transfer_src_pmac_to_vmac(ev, src, src_vmac, meter_id=meter_id)
+        else:
+            FlowManager.transfer_src_pmac_to_vmac(ev, src, src_vmac)
         FlowManager.transfer_dst_vmac_to_pmac(ev, src_vmac, src)
         FlowManager.install_receiving_flow_entry(dp, src, in_port)
-
-        # TODO bulid host queue for gateway
 
         return
