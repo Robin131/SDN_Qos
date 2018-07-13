@@ -2,13 +2,7 @@
 from ryu.lib import hub
 
 from FlowManager2 import FlowManager
-
-
-# flow entry for switch for gateway
-# 0 : check whether from NAT or arp from NAT (arp to controller, nat to 3, others to 1)     ok
-# 1 : check whether mac_dst is to this datacenter (yes 3, no 2)                             ok
-# 2 : send to other datacenters                                                             ok
-# 3 : send to local switch
+from Util2 import Util
 
 # flow entry for switch for gateway
 # 0 : check whether priority 1 (yes 3, no 1)
@@ -26,6 +20,8 @@ class GatewayManager(object):
                  datacenter_id,
                  gateway_flow_table_inquire_time,
                  gateway_port_inquire_time,
+                 gateway_datacenter_port_max_speed,
+                 balance_time_interval,
                  datapathes):
         super(GatewayManager, self)
 
@@ -34,20 +30,30 @@ class GatewayManager(object):
         self.datacenter_id = datacenter_id
         self.gateway_flow_table_inquire_time = gateway_flow_table_inquire_time
         self.gateway_port_inquire_time = gateway_port_inquire_time
+        self.gateway_datacenter_port_max_speed = gateway_datacenter_port_max_speed
+        self.balance_time_interval = balance_time_interval
         self.datapathes = datapathes
 
-        # dpid -> amount of flow
-        self.dpid_flow = {}
-        self.temp_dpid_flow = {}
+        self.balance_threshold = 0.75
 
-        # dpid -> {port_no -> speed}
+        self.dpid_flow = {}                 # dpid(switch) -> amount of flow
+        self.temp_dpid_flow = {}            # {dpid -> {'duration', 'byte_count'}}
+        self.gateway_port_speed = {}        # dpid -> {port_no -> speed}
+        self.temp_port_speed = {}           # {dpid -> {'duration', 'rx_bytes', 'tx_bytes'}}
 
     def register_gateway(self, ev):
         datapath = ev.datapath
         dpid = datapath.id
 
+        # init statistics record
         self.dpid_flow[dpid] = 0
+        Util.add2DimDict(self.temp_dpid_flow, dpid, 'duration', 0)
+        Util.add2DimDict(self.temp_dpid_flow, dpid, 'byte_count', 0)
+
         self.temp_dpid_flow[dpid] = 0
+        Util.add2DimDict(self.temp_port_speed, dpid, 'duration', 0)
+        Util.add2DimDict(self.temp_port_speed, dpid, 'rx_bytes', 0)
+        Util.add2DimDict(self.temp_port_speed, dpid, 'tx_bytes', 0)
 
         if dpid in self.potential_gateway.keys():
             self.gateways[dpid] = self.potential_gateway[dpid]
@@ -96,10 +102,6 @@ class GatewayManager(object):
 
     # handle gateway statistics info
     def gateway_statistics_handler(self, ev):
-        msg = ev.msg
-        dp = msg.datapath
-        dpid = dp.id
-
         for stat in ev.msg.body:
             eth_src = stat.match.get('eth_src')
             if eth_src is None:
@@ -114,14 +116,55 @@ class GatewayManager(object):
 
             # record flow amount
             byte_count = stat.byte_count
-            byte_difference = self.temp_dpid_flow[dpid] - byte_count
-            self.temp_dpid_flow[dpid] = byte_count
-            self.dpid_flow[dpid] = byte_difference
+            duration = stat.duration_sec
+            byte_difference = abs(self.temp_dpid_flow[dpid] - byte_count)
+            time_interval = abs(duration - self.temp_dpid_flow[dpid][duration])
+            speed = byte_difference / time_interval
+
+            self.temp_dpid_flow[dpid]['duration'] = duration
+            self.temp_dpid_flow[dpid]['byte_count'] = byte_count
+            self.dpid_flow[dpid] = speed
         return
 
     # handle datacenter port info
     def gateway_port_reply_handler(self, ev):
+        msg = ev.msg
+        dp = msg.datapath
+        dpid = dp.id
 
+        for stat in ev.msg.body:
+            duration = stat.duration_sec
+            rx_bytes = stat.rx_bytes
+            tx_bytes = stat.tx_bytes
 
+            all_bytes = abs(self.temp_port_speed[dpid]['rx_bytes'] - rx_bytes) + \
+                abs(self.temp_port_speed[dpid]['tx_bytes'] - tx_bytes)
+            time_interval = duration - self.temp_port_speed[dpid]['duration']
+            speed = all_bytes / time_interval
 
+            # update record
+            self.temp_port_speed[dpid]['duration'] = duration
+            self.temp_port_speed[dpid]['rx_bytes'] = rx_bytes
+            self.temp_port_speed[dpid]['tx_bytes'] = tx_bytes
 
+            self.gateway_port_speed[dpid] = speed
+
+        return
+
+    # a hub to balance gateway
+    def gateway_balance_hub(self):
+        hub.sleep(20)
+        while(True):
+            hub.sleep(self.balance_time_interval)
+            max_speed = self.gateway_datacenter_port_max_speed
+
+            for gw_id in self.gateway_port_speed.keys():
+                for port_no, speed in self.gateway_port_speed[gw_id].items():
+                    # check whether too fast
+                    if speed >= self.balance_threshold * max_speed:
+                        self.adjust_balabce()
+                    else:
+                        continue
+        return
+
+    # try

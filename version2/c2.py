@@ -32,6 +32,7 @@ class Controller(app_manager.RyuApp):
     GATEWAY_FLOW_INQUIRY_TIME = 10  # default time interval for gateway flow table inquiry
     GATEWAY_PORT_INQUIRY_TIME = 10  # default time interval for gateway datacenter port inquiry
     IP_REPLACE_MAC_TIMEOUT = 50     # default timeout for the table which modify mac_dst according to ip
+    GATEWAY_BALANCE_TIME = 3  # default time interval for gateway balance adjustment
 
     # port_speed
     DEFAULT_SS_BW = 300        # default bandwidth between switch
@@ -114,6 +115,16 @@ class Controller(app_manager.RyuApp):
             11 : {'NAT':6, 1:3}
         }
 
+        # remote datacenter_id -> {dpid -> peer}
+        # if there is no peer, then peer is -1
+        self.gateways_datacenter_port = {
+            2: {
+                10: -1,
+                11: 12,
+                12: 11
+            }
+        }
+
         # record all potential gateway_ip
         self.gateway_ip = [
             '191.0.0.1',
@@ -126,6 +137,7 @@ class Controller(app_manager.RyuApp):
             1: 1024 * 8,
             2: 1024 * 8
         }
+
 
 
         # record for system
@@ -226,13 +238,16 @@ class Controller(app_manager.RyuApp):
             datacenter_id=self.datacenter_id,
             gateway_flow_table_inquire_time=self.GATEWAY_FLOW_INQUIRY_TIME,
             datapathes=self.datapathes,
-            gateway_port_inquire_time=self.GATEWAY_PORT_INQUIRY_TIME
+            gateway_port_inquire_time=self.GATEWAY_PORT_INQUIRY_TIME,
+            gateway_datacenter_port_max_speed=self.DEFAULT_GG_BW,
+            balance_time_interval=self.GATEWAY_BALANCE_TIME
         )
 
         # hub
         self.init_hub = hub.spawn(self.init_controller)
         self.gateway_statistics_inquiry_hub = hub.spawn(self.gateway_manager.inquiry_gateway_flow_table_info)
         self.gateways_datacenter_port_hub = hub.spawn(self.gateway_manager.inquiry_gateway_datacenter_port)
+        self.gateway_banlance_hub = hub.spawn(self.gateway_manager.gateway_balance_hub)
 
     @set_ev_cls(ofp_event.EventOFPStateChange, [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def switch_state_change_handler(self, ev):
@@ -408,7 +423,7 @@ class Controller(app_manager.RyuApp):
         # install statistics flow entry on gateway
         for gw_id in self.gateways.keys():
             dpids = Util.difference_between_list(self.datapathes.keys(), self.gateways.keys())
-            FlowManager.install_statistics_flow(self.datapathes[gw_id], dpids)
+            FlowManager.install_statistics_flow(self.datapathes[gw_id], dpids, self.datacenter_id)
 
     def _check_switch_gateway_connection(self):
         for dpid in self.datapathes.keys():

@@ -228,15 +228,15 @@ class FlowManager(object):
 
     # install statistics flow entry for gateway
     @staticmethod
-    def install_statistics_flow(gw, dpids):
+    def install_statistics_flow(gw, dpids, datacenter_id):
         ofproto = gw.ofproto
         parser = gw.ofproto_parser
 
         for dpid in dpids:
-            switch_id = MacManager.get_vmac_value_with_wildcard_on_dpid(dpid)
-            mask = MacManager.get_vmac_mask_with_wildcard_on_dpid()
+            dst = MacManager.get_vmac_value_with_datacenter_id_and_dpid(datacenter_id, dpid)
+            mask = MacManager.get_mask_for_datacenter_id_and_dpid()
 
-            match = parser.OFPMatch(eth_src=(switch_id, mask))
+            match = parser.OFPMatch(eth_src=(dst, mask))
             instructions = [parser.OFPInstructionGotoTable(3)]
 
             FlowManager.add_flow(gw, 1, match, instructions, table_id=2)

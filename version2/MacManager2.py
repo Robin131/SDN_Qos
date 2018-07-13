@@ -119,3 +119,19 @@ class MacManager(object):
     def get_tenant_level_mask():
         return '0f:00:00:00:00:00'
 
+    @staticmethod
+    def get_vmac_value_with_datacenter_id_and_dpid(datacenter_id, dpid):
+        assert datacenter_id < 16
+        hex_str = str(hex(datacenter_id))
+        xPos = hex_str.find('x')
+        datacenter_id_str = hex_str[xPos + 1:]
+
+        switch_id_part = MacManager._generate_switch_id_vmac(dpid)
+
+        return datacenter_id_str + '0:00:00:' + switch_id_part + ':00'
+
+    @staticmethod
+    def get_mask_for_datacenter_id_and_dpid():
+        return 'f0:00:00:ff:ff:00'
+
+
