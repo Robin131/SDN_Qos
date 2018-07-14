@@ -368,3 +368,46 @@ class FlowManager(object):
 
         return
 
+    @staticmethod
+    def install_balance_flow_entry_for_gateway(gateway, dpid, this_datacenter_id, out_port,
+                                               meter_id=None):
+        parser = gateway.ofproto_parser
+        ofproto = gateway.ofproto
+
+        value = MacManager.get_vmac_value_with_datacenter_id_and_dpid(this_datacenter_id, dpid)
+        mask = MacManager.get_mask_for_datacenter_id_and_dpid()
+
+        match = parser.OFPMatch(eth_src=(value, mask))
+        actions = [parser.OFPActionOutput(out_port)]
+        if not meter_id:
+            instructions = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        else:
+            instructions = [
+                parser.OFPInstructionMeter(meter_id, ofproto.OFPIT_METER),
+                parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)
+            ]
+
+        FlowManager.add_flow(datapath=gateway, priority=1, match=match, instructions=instructions,
+                             table_id=1, buffer_id=None)
+        return
+
+    @staticmethod
+    def install_limit_speed_flow_entry_for_gateway(gateway, dpid, this_datacenter_id, meter_id):
+        parser = gateway.ofproto_parser
+        ofproto = gateway.ofproto
+
+        value = MacManager.get_vmac_value_with_datacenter_id_and_dpid(this_datacenter_id, dpid)
+        mask = MacManager.get_mask_for_datacenter_id_and_dpid()
+
+        match = parser.OFPMatch(eth_src=(value, mask))
+        instructions = [
+            parser.OFPInstructionMeter(meter_id, ofproto.OFPIT_METER),
+            parser.OFPInstructionGotoTable(2)
+        ]
+        FlowManager.add_flow(datapath=gateway, priority=1, match=match, instructions=instructions,
+                             table_id=1, buffer_id=0)
+        return
+
+
+
+

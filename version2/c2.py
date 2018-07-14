@@ -138,7 +138,11 @@ class Controller(app_manager.RyuApp):
             2: 1024 * 8
         }
 
-
+        # record all datacenter_id
+        self.all_datacenter_id = [
+            1,
+            2
+        ]
 
         # record for system
         # data in controller
@@ -240,7 +244,10 @@ class Controller(app_manager.RyuApp):
             datapathes=self.datapathes,
             gateway_port_inquire_time=self.GATEWAY_PORT_INQUIRY_TIME,
             gateway_datacenter_port_max_speed=self.DEFAULT_GG_BW,
-            balance_time_interval=self.GATEWAY_BALANCE_TIME
+            balance_time_interval=self.GATEWAY_BALANCE_TIME,
+            all_datacenter_id=self.all_datacenter_id,
+            topo_manager=self.topo_manager,
+            meter_manager=self.meter_manager
         )
 
         # hub
@@ -248,6 +255,7 @@ class Controller(app_manager.RyuApp):
         self.gateway_statistics_inquiry_hub = hub.spawn(self.gateway_manager.inquiry_gateway_flow_table_info)
         self.gateways_datacenter_port_hub = hub.spawn(self.gateway_manager.inquiry_gateway_datacenter_port)
         self.gateway_banlance_hub = hub.spawn(self.gateway_manager.gateway_balance_hub)
+        self.gateway_init_record_hub = hub.spawn(self.gateway_manager.init_gateway_record)
 
     @set_ev_cls(ofp_event.EventOFPStateChange, [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def switch_state_change_handler(self, ev):
@@ -423,7 +431,9 @@ class Controller(app_manager.RyuApp):
         # install statistics flow entry on gateway
         for gw_id in self.gateways.keys():
             dpids = Util.difference_between_list(self.datapathes.keys(), self.gateways.keys())
-            FlowManager.install_statistics_flow(self.datapathes[gw_id], dpids, self.datacenter_id)
+            for datacenter_id in self.all_datacenter_id:
+                if datacenter_id != self.datacenter_id:
+                    FlowManager.install_statistics_flow(self.datapathes[gw_id], dpids, self.datacenter_id)
 
     def _check_switch_gateway_connection(self):
         for dpid in self.datapathes.keys():
